@@ -7,6 +7,7 @@
 <title>C++ Hero — подготовка к экзамену за 7 дней</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root {
   --bg: #131f24; --bg2: #1b2b33; --card: #202f36; --line: #37464f;
@@ -209,6 +210,62 @@ code.inline { background: #0d1418; border: 1px solid var(--line); border-radius:
 <script src="data.js"></script>
 <script>
 'use strict';
+/* ================== Telegram Mini App ================== */
+const TG = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) ? window.Telegram.WebApp : null;
+let syncState = TG ? 'connecting' : 'off'; // off | connecting | ok | error
+if (TG) {
+  try { TG.ready(); TG.expand(); TG.setHeaderColor('#131f24'); TG.setBackgroundColor('#131f24'); } catch (e) {}
+  try { if (TG.disableVerticalSwipes) TG.disableVerticalSwipes(); } catch (e) {}
+}
+function tgHeaders(extra) {
+  return Object.assign(TG ? { 'Authorization': 'tma ' + TG.initData } : {}, extra || {});
+}
+function mergeProgress(a, b) { // объединение локального и серверного прогресса
+  if (!b || typeof b !== 'object') return a;
+  const out = JSON.parse(JSON.stringify(a));
+  out.xp = Math.max(a.xp || 0, b.xp || 0);
+  out.streak = Math.max(a.streak || 0, b.streak || 0);
+  out.bestExam = Math.max(a.bestExam || 0, b.bestExam || 0);
+  out.examCount = Math.max(a.examCount || 0, b.examCount || 0);
+  out.unlockAll = !!(a.unlockAll || b.unlockAll);
+  const da = a.lastDay ? new Date(a.lastDay) : 0, db = b.lastDay ? new Date(b.lastDay) : 0;
+  out.lastDay = (da > db) ? a.lastDay : (b.lastDay || a.lastDay || '');
+  out.done = Object.assign({}, b.done, a.done);
+  out.perfect = Object.assign({}, b.perfect, a.perfect);
+  out.tickets = Object.assign({}, b.tickets, a.tickets);
+  return out;
+}
+let syncTimer = null;
+function scheduleSync() {
+  if (!TG) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushProgress, 1200);
+}
+async function pushProgress() {
+  if (!TG) return;
+  try {
+    const r = await fetch('/api/progress', { method: 'POST', headers: tgHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(S) });
+    syncState = r.ok ? 'ok' : 'error';
+  } catch (e) { syncState = 'error'; }
+}
+async function pullProgress() {
+  if (!TG) return;
+  try {
+    const r = await fetch('/api/progress', { headers: tgHeaders() });
+    if (!r.ok) { syncState = 'error'; return; }
+    const j = await r.json();
+    if (j.progress) { S = mergeProgress(S, j.progress); save(); }
+    syncState = 'ok';
+    render();
+  } catch (e) { syncState = 'error'; }
+}
+// отправка прогресса при сворачивании мини-аппа
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && TG) {
+    try { navigator.sendBeacon('/api/progress', new Blob([JSON.stringify({ initData: TG.initData, progress: S })], { type: 'application/json' })); } catch (e) {}
+  }
+});
+
 /* ================== состояние ================== */
 const KEY = 'cppduo_v1';
 let S = load();
@@ -216,7 +273,7 @@ function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return s; } catch(e) {}
   return { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0 };
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} scheduleSync(); }
 
 const ALL_LESSONS = [];
 COURSE.forEach(u => u.lessons.forEach(l => ALL_LESSONS.push({ u, l })));
@@ -729,9 +786,11 @@ function renderTickets() {
 /* ================== профиль ================== */
 function renderProfile() {
   const perfect = Object.keys(S.perfect).length;
+  const tgUser = TG && TG.initDataUnsafe && TG.initDataUnsafe.user;
+  const syncBadge = syncState === 'ok' ? '☁️ прогресс синхронизирован' : syncState === 'error' ? '⚠️ нет связи с сервером — прогресс пока локально' : syncState === 'connecting' ? '🔄 подключение…' : '📴 локальный режим (открой через Telegram для синхронизации)';
   app.innerHTML = `<div class="page">
-    <h1>👤 Твой прогресс</h1>
-    <div class="sub">7 дней до экзамена — погнали!</div>
+    <h1>👤 ${tgUser ? esc(tgUser.first_name || 'Твой прогресс') : 'Твой прогресс'}</h1>
+    <div class="sub">${tgUser && tgUser.username ? '@' + esc(tgUser.username) + ' · ' : ''}${syncBadge}</div>
     <div class="statgrid">
       <div class="statcard"><div class="v">⚡ ${S.xp}</div><div class="l">Всего XP</div></div>
       <div class="statcard"><div class="v">🔥 ${S.streak}</div><div class="l">Дней подряд</div></div>
@@ -752,6 +811,7 @@ function renderProfile() {
 }
 
 render();
+pullProgress();
 </script>
 </body>
 </html>
