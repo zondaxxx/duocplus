@@ -142,6 +142,19 @@ code.inline { background: #0d1418; border: 1px solid var(--line); border-radius:
 .shake { animation: shake .3s; }
 @keyframes shake { 0%,100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
+/* ввод ответа строкой */
+.answer-input {
+  width: 100%; padding: 15px 16px; border-radius: 14px;
+  background: var(--card); border: 2px solid var(--line); border-bottom-width: 4px;
+  color: var(--txt); font-size: 19px; font-weight: 800; font-family: inherit; outline: none;
+}
+.answer-input::placeholder { color: var(--mut); font-weight: 700; }
+.answer-input:focus { border-color: var(--blue); }
+.answer-input:disabled { opacity: .65; }
+.answer-input.mono { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 17px; }
+.in-hint { margin-top: 12px; color: var(--mut); font-size: 14px; font-weight: 700; }
+.in-tag { display:inline-block; margin-bottom:12px; font-size:12px; font-weight:900; letter-spacing:.6px; text-transform:uppercase; color:var(--purple); background:rgba(206,130,255,.12); border:2px solid rgba(206,130,255,.3); padding:4px 10px; border-radius:10px; }
+
 /* порядок и пропуски */
 .slots { min-height: 56px; border-bottom: 2px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 2px; margin-bottom: 18px; }
 .bank { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
@@ -572,6 +585,7 @@ function showExercise() {
   else if (ex.t === 'f') body = renderFill(ex);
   else if (ex.t === 'm') body = renderMatch(ex);
   else if (ex.t === 'o') body = renderOrder(ex);
+  else if (ex.t === 'in') body = renderInput(ex);
   app.innerHTML = `
     <div class="lesson-top">
       <button class="quit" id="quit">✕</button>
@@ -727,6 +741,44 @@ function bindExercise(ex) {
   else if (ex.t === 'f') bindFill(ex);
   else if (ex.t === 'm') bindMatch(ex);
   else if (ex.t === 'o') bindOrder(ex);
+  else if (ex.t === 'in') bindInput(ex);
+}
+
+/* ---------- input (впиши ответ строкой) ---------- */
+function renderInput(ex) {
+  return `<div class="extitle">${fmt(ex.q)}</div>
+    ${ex.code ? `<pre class="code">${hl(ex.code)}</pre>` : ''}
+    <div class="in-tag">✍️ впиши ответ — без вариантов</div>
+    <input class="answer-input ${ex.mono ? 'mono' : ''}" id="ansin" type="text" inputmode="text"
+      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+      placeholder="${ex.ph ? esc(ex.ph) : 'Впиши ответ…'}">
+    ${ex.hint ? `<div class="in-hint">💡 ${fmt(ex.hint)}</div>` : ''}`;
+}
+function normAns(s) {
+  return String(s).toLowerCase().trim()
+    .replace(/[«»"'`]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?;,]+$/, '');
+}
+function matchAnswer(input, accepted) {
+  const u = normAns(input);
+  const list = Array.isArray(accepted) ? accepted : [accepted];
+  return list.some(a => normAns(a) === u);
+}
+function bindInput(ex) {
+  const inp = document.getElementById('ansin');
+  const check = checkBtn();
+  inp.addEventListener('input', () => { check.disabled = !inp.value.trim(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); if (inp.value.trim()) check.click(); }
+  });
+  check.onclick = () => {
+    if (!inp.value.trim()) return;
+    inp.disabled = true;
+    const ok = matchAnswer(inp.value, ex.a);
+    feedback(ok, ex, Array.isArray(ex.a) ? ex.a[0] : ex.a);
+  };
+  setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
 }
 function checkBtn() { return document.getElementById('check'); }
 
