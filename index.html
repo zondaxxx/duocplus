@@ -475,8 +475,10 @@ function renderHome() {
     });
     h += `</div>`;
   });
-  h += `<p style="text-align:center;color:var(--mut);font-size:13px;padding:10px 30px 30px">
-    Сделано по конспекту и 45 экзаменационным вопросам · удачи на экзамене! 💪</p>`;
+  h += `<p style="text-align:center;color:var(--mut);font-size:13px;padding:10px 30px 6px">
+    Сделано по конспекту и 45 экзаменационным вопросам · удачи на экзамене! 💪</p>
+    <p style="text-align:center;font-size:13px;padding:0 30px 30px;font-weight:800">
+    made by <a href="https://t.me/nyanzondaxxx" style="color:var(--blue);text-decoration:none">@nyanzondaxxx</a></p>`;
   app.innerHTML = h;
   const sc = document.getElementById('srscard');
   if (sc) sc.onclick = startReview;
@@ -932,6 +934,8 @@ function renderProfile() {
     <button class="btn red" id="reset" style="margin-top:12px">Сбросить прогресс</button>
     <p style="color:var(--mut);font-size:13px;margin-top:18px;font-weight:700">
       План: 1 день = 1 юнит. Раздел «Экзамен» — пробник из 20 случайных вопросов. Уроки «📝 Экзамен: задачи» в дне 7 — разбор реальных типовых задач с листочка.</p>
+    <p style="text-align:center;font-size:14px;margin-top:22px;font-weight:800">
+      made by <a href="https://t.me/nyanzondaxxx" style="color:var(--blue);text-decoration:none">@nyanzondaxxx</a></p>
   </div>`;
   document.getElementById('unlock').onclick = () => { S.unlockAll = !S.unlockAll; save(); renderProfile(); };
   document.getElementById('reset').onclick = () => {
