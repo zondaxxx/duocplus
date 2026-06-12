@@ -330,7 +330,7 @@ window.addEventListener('visibilitychange', () => {
 const KEY = 'cppduo_v1';
 let S = load();
 function load() {
-  const base = { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {} };
+  const base = { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {}, soundOff: false };
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return Object.assign(base, s, { srs: s.srs || {}, codeDone: s.codeDone || {} }); } catch(e) {}
   return base;
 }
@@ -421,6 +421,49 @@ function theoryHTML(md) {
 }
 function shuffle(a) { a = a.slice(); for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 function vib(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+
+/* ================== звук (Web Audio, без файлов) ================== */
+let _ac = null;
+function ac() {
+  if (S.soundOff) return null;
+  if (!_ac) { try { _ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (_ac.state === 'suspended') { try { _ac.resume(); } catch (e) {} }
+  return _ac;
+}
+function tone(freq, start, dur, opt) {
+  opt = opt || {};
+  const c = ac(); if (!c) return;
+  const t0 = c.currentTime + start;
+  const osc = c.createOscillator(), g = c.createGain();
+  osc.type = opt.type || 'sine';
+  osc.frequency.setValueAtTime(freq, t0);
+  if (opt.glideTo) osc.frequency.exponentialRampToValueAtTime(opt.glideTo, t0 + dur);
+  const peak = opt.gain || 0.16;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g).connect(c.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.03);
+}
+const SFX = {
+  select() { tone(540, 0, 0.05, { type: 'sine', gain: 0.07 }); },
+  click()  { tone(400, 0, 0.045, { type: 'triangle', gain: 0.06 }); },
+  correct() { tone(659.25, 0, 0.10, { type: 'triangle', gain: 0.16 }); tone(987.77, 0.09, 0.15, { type: 'triangle', gain: 0.16 }); },
+  wrong()   { tone(196, 0, 0.20, { type: 'sawtooth', gain: 0.13, glideTo: 120 }); tone(146, 0.02, 0.20, { type: 'square', gain: 0.05 }); },
+  complete() { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.10, 0.16, { type: 'triangle', gain: 0.15 })); tone(1568, 0.42, 0.22, { type: 'sine', gain: 0.09 }); },
+  fanfare() { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, i * 0.09, 0.18, { type: 'triangle', gain: 0.16 })); tone(1046.5, 0.5, 0.45, { type: 'sine', gain: 0.08 }); tone(1318.5, 0.5, 0.45, { type: 'sine', gain: 0.06 }); },
+  fail()    { [330, 277, 233, 174].forEach((f, i) => tone(f, i * 0.14, 0.22, { type: 'sawtooth', gain: 0.12, glideTo: f * 0.97 })); },
+};
+function haptic(kind) {
+  try {
+    if (TG && TG.HapticFeedback) {
+      if (kind === 'success' || kind === 'error' || kind === 'warning') TG.HapticFeedback.notificationOccurred(kind);
+      else TG.HapticFeedback.impactOccurred(kind);
+    }
+  } catch (e) {}
+}
+// разблокировка аудио по первому касанию (требование мобильных браузеров)
+window.addEventListener('pointerdown', () => ac(), { once: true });
 function todayStr() { return new Date().toDateString(); }
 function bumpStreak() {
   const t = todayStr();
@@ -621,6 +664,7 @@ function bindChoice(ex) {
     btns.forEach(x => x.classList.remove('sel'));
     b.classList.add('sel'); sel = +b.dataset.i;
     checkBtn().disabled = false;
+    SFX.select();
   });
   checkBtn().onclick = () => {
     const ok = sel === L._correct;
@@ -651,6 +695,7 @@ function bindFill(ex) {
     L._fill = L._bank[+b.dataset.i];
     gap.textContent = L._fill;
     checkBtn().disabled = false;
+    SFX.click();
   });
   gap.onclick = () => { L._fill = null; gap.innerHTML = '&nbsp;'; toks.forEach(x => x.classList.remove('used')); checkBtn().disabled = true; };
   checkBtn().onclick = () => {
@@ -681,7 +726,7 @@ function bindMatch(ex) {
     if (a.dataset.p === b.dataset.p) {
       [a, b].forEach(x => { x.classList.remove('sel'); x.classList.add('off'); });
       L._msolved++;
-      vib(10);
+      vib(10); tone(880, 0, 0.08, { type: 'triangle', gain: 0.12 });
       if (L._msolved === ex.pairs.length) {
         feedback(!L._mwrong, ex, null, true); // пары: ошибка не отнимает сердце
       }
@@ -697,6 +742,7 @@ function bindMatch(ex) {
     if (side === 'l') { if (selL) selL.classList.remove('sel'); selL = b; }
     else { if (selR) selR.classList.remove('sel'); selR = b; }
     b.classList.add('sel');
+    SFX.select();
     tryMatch();
   });
   checkBtn().style.display = 'none';
@@ -728,6 +774,7 @@ function bindOrder(ex) {
     b.classList.add('used');
     L._osel.push({ t: L._obank[+b.dataset.i].t, i: L._obank[+b.dataset.i].i, bi: +b.dataset.i });
     redraw();
+    SFX.click();
   });
   checkBtn().onclick = () => {
     const ok = L._osel.every((s, k) => s.i === k);
@@ -791,7 +838,7 @@ function feedback(ok, ex, correctText, noHeart) {
     L.solved.add(exi);
     if (!L.seenWrong.has(exi)) L.firstTry++;
     if (ex._gid && S.srs[ex._gid]) srsAdvance(ex._gid); // верный ответ отодвигает повтор
-    vib(15);
+    vib(15); SFX.correct(); haptic('success');
     bar.className = 'checkbar ok';
     bar.innerHTML = `<div class="fb"><div class="fico">✅</div><div>
         <b class="ok-t">${['Отлично!','Верно!','Супер!','Именно так!','Красавчик!'][Math.floor(Math.random()*5)]}</b>
@@ -803,7 +850,7 @@ function feedback(ok, ex, correctText, noHeart) {
     if (!noHeart) L.mistakes++;
     if (!noHeart && !L.exam && !L.review) L.hearts--; // сердца теряем только в обычном уроке
     if (ex._gid) srsLapse(ex._gid); // ошибка ставит карточку в очередь повторений
-    vib([60,40,60]);
+    vib([60,40,60]); SFX.wrong(); haptic('error');
     if (!L.exam) L.queue.push(exi); // повторим в конце урока/повторения (на экзамене второго шанса нет)
     bar.className = 'checkbar no';
     bar.innerHTML = `<div class="fb"><div class="fico">❌</div><div>
@@ -827,6 +874,7 @@ function feedback(ok, ex, correctText, noHeart) {
 }
 
 function failLesson() {
+  SFX.fail(); haptic('error');
   const id = L.id; L = null;
   app.innerHTML = `<div class="endscr">
     <div class="big">💔</div>
@@ -865,6 +913,8 @@ function finishLesson() {
     ${perfect ? '<p style="color:var(--gold);font-weight:900;margin-bottom:20px">Без единой ошибки! +5 бонусных XP</p>' : ''}
     <button class="btn" id="cont">Продолжить</button>
   </div>`;
+  if (perfect) SFX.fanfare(); else SFX.complete();
+  haptic('success');
   confetti();
   document.getElementById('cont').onclick = () => render();
 }
@@ -922,7 +972,8 @@ function finishExam(acc) {
     <button class="btn" id="again">Ещё раз</button>
     <button class="btn ghost" id="home">На карту</button>
   </div>`;
-  if (acc >= 75) confetti();
+  if (acc >= 75) { SFX.fanfare(); confetti(); } else SFX.complete();
+  haptic('success');
   document.getElementById('again').onclick = () => { TAB = 'exam'; render(); };
   document.getElementById('home').onclick = () => { TAB = 'home'; render(); };
 }
@@ -942,6 +993,7 @@ function finishReview(acc) {
     ${left > 0 ? '<button class="btn" id="more">Повторить ещё</button>' : ''}
     <button class="btn ${left > 0 ? 'ghost' : ''}" id="home">На карту</button>
   </div>`;
+  SFX.complete(); haptic('success');
   confetti();
   const m = document.getElementById('more'); if (m) m.onclick = startReview;
   document.getElementById('home').onclick = () => { TAB = 'home'; render(); };
@@ -982,13 +1034,15 @@ function renderProfile() {
       <div class="statcard"><div class="v">🧪 ${Object.keys(S.codeDone).length}/${typeof CODE_CHALLENGES !== 'undefined' ? CODE_CHALLENGES.length : 0}</div><div class="l">Код-челленджей</div></div>
       <div class="statcard"><div class="v">🧠 ${weakCount()}</div><div class="l">Карточек на повторе</div></div>
     </div>
-    <button class="btn blue" id="unlock">${S.unlockAll ? '🔒 Вернуть последовательное прохождение' : '🔓 Разблокировать все уроки'}</button>
+    <button class="btn ${S.soundOff ? 'ghost' : ''}" id="sound">${S.soundOff ? '🔇 Звук выключен' : '🔊 Звук включён'}</button>
+    <button class="btn blue" id="unlock" style="margin-top:12px">${S.unlockAll ? '🔒 Вернуть последовательное прохождение' : '🔓 Разблокировать все уроки'}</button>
     <button class="btn red" id="reset" style="margin-top:12px">Сбросить прогресс</button>
     <p style="color:var(--mut);font-size:13px;margin-top:18px;font-weight:700">
       План: 1 день = 1 юнит. Раздел «Экзамен» — пробник из 20 случайных вопросов. Уроки «📝 Экзамен: задачи» в дне 7 — разбор реальных типовых задач с листочка.</p>
     <p style="text-align:center;font-size:14px;margin-top:22px;font-weight:800">
       made by <a href="https://t.me/nyanzondaxxx" style="color:var(--blue);text-decoration:none">@nyanzondaxxx</a></p>
   </div>`;
+  document.getElementById('sound').onclick = () => { S.soundOff = !S.soundOff; save(); if (!S.soundOff) SFX.correct(); renderProfile(); };
   document.getElementById('unlock').onclick = () => { S.unlockAll = !S.unlockAll; save(); renderProfile(); };
   document.getElementById('reset').onclick = () => {
     if (confirm('Точно сбросить весь прогресс?')) { localStorage.removeItem(KEY); S = load(); render(); }
@@ -1077,7 +1131,7 @@ function openEditor(opts) {
       if (first) S.xp += 15;
       bumpStreak(); save();
       out.textContent = (got || '(пусто)') + '\n\n✅ Верно! ' + (first ? '+15 XP' : 'Задача уже была решена.');
-      confetti(); vib(15);
+      SFX.fanfare(); haptic('success'); confetti(); vib(15);
     } else {
       out.className = 'run-out err';
       out.textContent = (res.compile_error ? res.compile_error.trim() + '\n\n' : '') +
