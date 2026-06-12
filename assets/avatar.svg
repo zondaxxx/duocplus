@@ -1,0 +1,90 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3fae06"/>
+      <stop offset="1" stop-color="#2c8a00"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.36" r="0.65">
+      <stop offset="0" stop-color="#7ed957" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#7ed957" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8bdc2c"/>
+      <stop offset="1" stop-color="#5cc406"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3fbe6"/>
+      <stop offset="1" stop-color="#dcefc2"/>
+    </linearGradient>
+    <linearGradient id="beak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffc02e"/>
+      <stop offset="1" stop-color="#ff9a14"/>
+    </linearGradient>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a4067"/>
+      <stop offset="1" stop-color="#252a45"/>
+    </linearGradient>
+  </defs>
+
+  <!-- фон -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+
+  <!-- ушки-кисточки -->
+  <path d="M205 150 L168 80 Q165 72 178 76 L243 126 Z" fill="#3f9a04"/>
+  <path d="M307 150 L344 80 Q347 72 334 76 L269 126 Z" fill="#3f9a04"/>
+
+  <!-- крылья -->
+  <ellipse cx="126" cy="300" rx="44" ry="92" fill="#49a604" transform="rotate(-16 126 300)"/>
+  <ellipse cx="386" cy="300" rx="44" ry="92" fill="#49a604" transform="rotate(16 386 300)"/>
+
+  <!-- тело -->
+  <ellipse cx="256" cy="272" rx="152" ry="172" fill="url(#body)"/>
+  <ellipse cx="256" cy="272" rx="152" ry="172" fill="none" stroke="#3f9a04" stroke-opacity="0.35" stroke-width="6"/>
+
+  <!-- животик -->
+  <ellipse cx="256" cy="346" rx="94" ry="96" fill="url(#belly)"/>
+
+  <!-- лапки -->
+  <g fill="#ff9a14">
+    <path d="M214 430 q-30 6 -34 30 q26 8 40 -4 q14 12 30 2 q-6 -24 -36 -28 Z"/>
+    <path d="M298 430 q30 6 34 30 q-26 8 -40 -4 q-14 12 -30 2 q6 -24 36 -28 Z"/>
+  </g>
+
+  <!-- глаза -->
+  <g>
+    <circle cx="212" cy="214" r="60" fill="#ffffff"/>
+    <circle cx="300" cy="214" r="60" fill="#ffffff"/>
+    <circle cx="212" cy="214" r="60" fill="none" stroke="#cdeaad" stroke-width="4"/>
+    <circle cx="300" cy="214" r="60" fill="none" stroke="#cdeaad" stroke-width="4"/>
+    <circle cx="226" cy="222" r="28" fill="#23283f"/>
+    <circle cx="286" cy="222" r="28" fill="#23283f"/>
+    <circle cx="217" cy="213" r="9" fill="#ffffff"/>
+    <circle cx="277" cy="213" r="9" fill="#ffffff"/>
+    <circle cx="234" cy="233" r="5" fill="#ffffff" fill-opacity="0.8"/>
+    <circle cx="294" cy="233" r="5" fill="#ffffff" fill-opacity="0.8"/>
+  </g>
+
+  <!-- брови -->
+  <rect x="168" y="142" width="76" height="18" rx="9" fill="#3f9a04" transform="rotate(-13 206 151)"/>
+  <rect x="268" y="142" width="76" height="18" rx="9" fill="#3f9a04" transform="rotate(13 306 151)"/>
+
+  <!-- клюв -->
+  <path d="M256 246 L282 266 L256 290 L230 266 Z" fill="url(#beak)"/>
+  <path d="M256 270 L269 270 L256 283 L243 270 Z" fill="#e07e0a" fill-opacity="0.55"/>
+
+  <!-- C++ на животике -->
+  <text x="256" y="372" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="56" letter-spacing="1" fill="#2f8a00">C++</text>
+
+  <!-- академическая шапочка -->
+  <g>
+    <ellipse cx="256" cy="138" rx="66" ry="22" fill="#2a2f4c"/>
+    <polygon points="256,86 356,120 256,154 156,120" fill="url(#board)"/>
+    <polygon points="256,86 356,120 256,128 156,120" fill="#454c78" fill-opacity="0.7"/>
+    <circle cx="256" cy="120" r="8" fill="#ffc800"/>
+    <path d="M256 120 L350 120" stroke="#ffc800" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M350 120 Q356 150 352 168" stroke="#ffc800" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M352 166 l-9 26 q9 7 18 0 Z" fill="#ffd23f"/>
+    <circle cx="352" cy="166" r="6" fill="#ffc800"/>
+  </g>
+</svg>
