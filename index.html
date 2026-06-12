@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#131f24">
+<title>C++ Hero — подготовка к экзамену за 7 дней</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #131f24; --bg2: #1b2b33; --card: #202f36; --line: #37464f;
+  --txt: #f1f7fb; --mut: #8da6b3;
+  --green: #58cc02; --green-d: #46a302; --red: #ff4b4b; --red-d: #d33131;
+  --blue: #1cb0f6; --gold: #ffc800; --purple: #ce82ff;
+  --r: 16px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  font-family: 'Nunito', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--txt);
+  font-size: 17px; line-height: 1.45;
+  overscroll-behavior-y: none;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+#wrap { max-width: 560px; margin: 0 auto; min-height: 100%; position: relative; }
+#app { padding-bottom: 90px; }
+
+/* ===== верхняя панель ===== */
+.topbar {
+  position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-around;
+  padding: 12px 16px; background: rgba(19,31,36,.92); backdrop-filter: blur(8px);
+  border-bottom: 2px solid var(--line); font-weight: 900; font-size: 18px;
+}
+.topbar span { display: flex; align-items: center; gap: 6px; }
+.stat-fire { color: #ff9600; } .stat-xp { color: var(--gold); } .stat-day { color: var(--blue); }
+
+/* ===== путь ===== */
+.unit-head {
+  margin: 24px 12px 8px; border-radius: var(--r); padding: 18px 20px; color: #fff;
+  box-shadow: 0 4px 0 rgba(0,0,0,.25);
+}
+.unit-head h2 { font-size: 21px; font-weight: 900; }
+.unit-head p { font-size: 14px; opacity: .92; margin-top: 2px; font-weight: 700; }
+.unit-head .day-tag { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .5px; opacity: .85; }
+.path { display: flex; flex-direction: column; align-items: center; padding: 10px 0 6px; }
+.node-row { display: flex; justify-content: center; width: 100%; }
+.node {
+  width: 72px; height: 72px; border-radius: 50%; margin: 10px 0;
+  display: flex; align-items: center; justify-content: center; font-size: 30px;
+  position: relative; transition: transform .1s;
+  background: var(--card); box-shadow: 0 6px 0 #0e161a; border: none;
+}
+.node:active { transform: translateY(4px); box-shadow: 0 2px 0 #0e161a; }
+.node.locked { filter: grayscale(1); opacity: .45; }
+.node.done { background: var(--c, var(--green)); box-shadow: 0 6px 0 rgba(0,0,0,.35); }
+.node.active { background: var(--c, var(--green)); box-shadow: 0 6px 0 rgba(0,0,0,.35); animation: bounce 1.6s infinite; margin-top: 40px; }
+.node.active::after {
+  content: 'НАЧАТЬ'; position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
+  background: #fff; color: var(--c, var(--green)); font-size: 12px; font-weight: 900;
+  padding: 4px 10px; border-radius: 10px; white-space: nowrap; letter-spacing: 1px;
+  animation: float 1.6s infinite;
+}
+.node .check { position: absolute; bottom: -2px; right: -2px; background: #fff; color: var(--green-d);
+  width: 26px; height: 26px; border-radius: 50%; font-size: 15px; display: flex; align-items: center; justify-content: center; font-weight: 900; }
+@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes float { 0%,100% { transform: translate(-50%,0); } 50% { transform: translate(-50%,-4px); } }
+.node-label { font-size: 13px; color: var(--mut); font-weight: 800; text-align: center; margin-top: -6px; max-width: 130px; }
+
+/* ===== нижняя навигация ===== */
+#nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 560px; z-index: 40;
+  display: flex; justify-content: space-around; padding: 8px 0 max(10px, env(safe-area-inset-bottom));
+  background: var(--bg); border-top: 2px solid var(--line);
+}
+#nav button { font-size: 26px; padding: 6px 18px; border-radius: 12px; opacity: .55; }
+#nav button.cur { opacity: 1; background: rgba(28,176,246,.12); outline: 2px solid var(--blue); }
+body.inlesson #nav { display: none; }
+
+/* ===== модалки ===== */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  background: var(--bg2); width: 100%; max-width: 560px; border-radius: 24px 24px 0 0;
+  padding: 24px 20px max(24px, env(safe-area-inset-bottom)); max-height: 86vh; overflow-y: auto;
+  animation: up .22s ease-out;
+}
+@keyframes up { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sheet h3 { font-size: 22px; font-weight: 900; margin-bottom: 4px; }
+.sheet .sub { color: var(--mut); font-weight: 700; margin-bottom: 16px; }
+
+/* ===== кнопки ===== */
+.btn {
+  display: block; width: 100%; padding: 14px; border-radius: 14px;
+  font-size: 17px; font-weight: 900; text-transform: uppercase; letter-spacing: .8px;
+  background: var(--green); color: #fff; box-shadow: 0 4px 0 var(--green-d);
+  transition: transform .07s, box-shadow .07s, filter .15s; text-align: center;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--green-d); }
+.btn.blue { background: var(--blue); box-shadow: 0 4px 0 #1389c4; }
+.btn.ghost { background: transparent; color: var(--blue); box-shadow: none; border: 2px solid var(--line); }
+.btn.red { background: var(--red); box-shadow: 0 4px 0 var(--red-d); }
+.btn:disabled { background: var(--card); color: var(--mut); box-shadow: 0 4px 0 #0e161a; cursor: default; }
+.btn + .btn { margin-top: 12px; }
+
+/* ===== урок ===== */
+.lesson-top { display: flex; align-items: center; gap: 12px; padding: 14px 16px 6px; }
+.lesson-top .quit { font-size: 22px; color: var(--mut); padding: 4px 8px; }
+.pbar { flex: 1; height: 14px; background: var(--card); border-radius: 8px; overflow: hidden; }
+.pbar > div { height: 100%; background: var(--green); border-radius: 8px; width: 0; transition: width .35s; position: relative; }
+.pbar > div::after { content: ''; position: absolute; top: 3px; left: 8px; right: 8px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.3); }
+.hearts { font-weight: 900; font-size: 17px; color: var(--red); display: flex; gap: 3px; align-items: center; }
+.exwrap { padding: 18px 16px 140px; }
+.extitle { font-size: 21px; font-weight: 900; margin-bottom: 14px; }
+pre.code {
+  background: #0d1418; border: 2px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; overflow-x: auto; font-size: 13.5px; line-height: 1.5;
+  font-family: 'SF Mono', Menlo, Consolas, monospace; margin-bottom: 14px; white-space: pre;
+}
+.tok-k { color: #ff79b8; } .tok-s { color: #ffd866; } .tok-c { color: #6f8a96; } .tok-n { color: #8be9fd; }
+code.inline { background: #0d1418; border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-family: Menlo, Consolas, monospace; font-size: .88em; }
+
+.opt {
+  display: block; width: 100%; text-align: left; padding: 13px 16px; margin-bottom: 10px;
+  background: var(--card); border: 2px solid var(--line); border-bottom-width: 4px; border-radius: 14px;
+  font-size: 16px; font-weight: 700; transition: all .12s; color: var(--txt);
+}
+.opt:active { transform: translateY(2px); border-bottom-width: 2px; }
+.opt.sel { border-color: var(--blue); background: rgba(28,176,246,.14); color: var(--blue); }
+.opt.good { border-color: var(--green); background: rgba(88,204,2,.15); color: #a8ff6b; }
+.opt.bad { border-color: var(--red); background: rgba(255,75,75,.15); color: #ff9c9c; }
+
+/* пары */
+.match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mopt { padding: 12px 10px; min-height: 58px; display: flex; align-items: center; justify-content: center; text-align: center;
+  background: var(--card); border: 2px solid var(--line); border-bottom-width: 4px; border-radius: 14px; font-size: 14.5px; font-weight: 700; transition: all .12s; }
+.mopt.sel { border-color: var(--blue); color: var(--blue); background: rgba(28,176,246,.14); }
+.mopt.off { opacity: .28; pointer-events: none; border-color: var(--green); }
+.mopt.shake { animation: shake .3s; border-color: var(--red); }
+.shake { animation: shake .3s; }
+@keyframes shake { 0%,100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+/* порядок и пропуски */
+.slots { min-height: 56px; border-bottom: 2px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 2px; margin-bottom: 18px; }
+.bank { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.tokenbtn { padding: 10px 14px; background: var(--card); border: 2px solid var(--line); border-bottom-width: 4px;
+  border-radius: 12px; font-size: 15px; font-weight: 800; transition: all .1s; }
+.tokenbtn:active { transform: translateY(2px); }
+.tokenbtn.used { opacity: .25; pointer-events: none; }
+.fill-q { font-size: 18px; font-weight: 700; margin-bottom: 18px; line-height: 2; }
+.gap { display: inline-block; min-width: 110px; border-bottom: 3px solid var(--mut); text-align: center; font-weight: 900; color: var(--gold); padding: 0 6px; }
+
+/* футер проверки */
+.checkbar {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 560px;
+  padding: 16px 16px max(20px, env(safe-area-inset-bottom)); background: var(--bg); border-top: 2px solid var(--line); z-index: 45;
+}
+.checkbar.ok { background: #122e18; border-color: #1d4a26; }
+.checkbar.no { background: #331417; border-color: #582025; }
+.fb { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.fb .fico { font-size: 30px; line-height: 1; }
+.fb b { font-size: 19px; display: block; }
+.fb .ok-t { color: #7dff5e; } .fb .no-t { color: #ff9c9c; }
+.fb p { font-size: 14.5px; color: var(--txt); opacity: .9; margin-top: 3px; }
+
+/* теория */
+.theory { font-size: 15.5px; }
+.theory p { margin-bottom: 10px; }
+.theory table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13.5px; }
+.theory th, .theory td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; }
+.theory th { background: var(--card); }
+
+/* конец урока */
+.endscr { text-align: center; padding: 70px 24px 40px; }
+.endscr .big { font-size: 64px; margin-bottom: 8px; }
+.endscr h2 { font-size: 26px; font-weight: 900; color: var(--gold); margin-bottom: 24px; }
+.endcards { display: flex; gap: 10px; justify-content: center; margin-bottom: 34px; }
+.endcard { border-radius: 14px; padding: 2px; min-width: 100px; font-weight: 900; }
+.endcard .in { background: var(--bg); margin: 2px; border-radius: 12px; padding: 12px 8px; }
+.endcard small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.confetti { position: fixed; top: -30px; font-size: 22px; z-index: 60; animation: fall linear forwards; pointer-events: none; }
+@keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity: .4; } }
+
+/* списки (билеты, профиль) */
+.page { padding: 18px 16px; }
+.page h1 { font-size: 24px; font-weight: 900; margin-bottom: 4px; }
+.page .sub { color: var(--mut); font-weight: 700; margin-bottom: 18px; font-size: 15px; }
+.ticket { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border: 2px solid var(--line);
+  border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; font-weight: 700; font-size: 15px; }
+.ticket .num { color: var(--mut); font-weight: 900; min-width: 26px; }
+.ticket.done { border-color: var(--green); }
+.ticket.done .tx { color: var(--mut); text-decoration: line-through; }
+.ticket input { width: 22px; height: 22px; accent-color: var(--green); margin-top: 2px; flex: none; }
+.statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.statcard { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 16px; }
+.statcard .v { font-size: 26px; font-weight: 900; }
+.statcard .l { font-size: 13px; color: var(--mut); font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="app"></div></div>
+<nav id="nav">
+  <button data-tab="home" title="Путь">🛤️</button>
+  <button data-tab="exam" title="Экзамен">🎓</button>
+  <button data-tab="tickets" title="Билеты">📋</button>
+  <button data-tab="me" title="Профиль">👤</button>
+</nav>
+<script src="data.js"></script>
+<script>
+'use strict';
+/* ================== состояние ================== */
+const KEY = 'cppduo_v1';
+let S = load();
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return s; } catch(e) {}
+  return { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0 };
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+
+const ALL_LESSONS = [];
+COURSE.forEach(u => u.lessons.forEach(l => ALL_LESSONS.push({ u, l })));
+function lessonIndex(id) { return ALL_LESSONS.findIndex(x => x.l.id === id); }
+function isUnlocked(id) {
+  if (S.unlockAll) return true;
+  const i = lessonIndex(id);
+  return i === 0 || !!S.done[ALL_LESSONS[i-1].l.id];
+}
+function doneCount() { return ALL_LESSONS.filter(x => S.done[x.l.id]).length; }
+
+/* ================== утилиты ================== */
+const app = document.getElementById('app');
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmt(s) { // инлайн-разметка: `код`, **жирный**
+  return esc(s).replace(/`([^`]+)`/g, '<code class="inline">$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+}
+function hl(code) { // подсветка C++
+  let t = esc(code);
+  const hold = [];
+  t = t.replace(/(\/\/[^\n]*)|(&quot;.*?&quot;|"[^"]*")|('[^']*')/g, m => {
+    hold.push(m.startsWith('//') ? '<span class="tok-c">'+m+'</span>' : '<span class="tok-s">'+m+'</span>');
+    return '\u0001' + (hold.length-1) + '\u0001';
+  });
+  t = t.replace(/\b(class|struct|public|private|protected|virtual|override|final|explicit|template|typename|concept|requires|using|namespace|friend|operator|const|constexpr|static|inline|return|if|else|for|while|do|new|delete|try|catch|throw|noexcept|this|true|false|nullptr|default|sizeof|enum|switch|case|break|continue)\b/g, '<span class="tok-k">$1</span>');
+  t = t.replace(/\b(int|double|float|char|void|bool|auto|size_t|long|short|unsigned)\b/g, '<span class="tok-n">$1</span>');
+  t = t.replace(/\u0001(\d+)\u0001/g, (m, i) => hold[+i]);
+  return t;
+}
+function theoryHTML(md) {
+  const parts = String(md).split('```');
+  let out = '';
+  parts.forEach((p, i) => {
+    if (i % 2 === 1) { out += '<pre class="code">' + hl(p.replace(/^\n|\n$/g,'')) + '</pre>'; return; }
+    const lines = p.split('\n'); let tbl = [];
+    const flushT = () => {
+      if (!tbl.length) return;
+      out += '<table>' + tbl.map((r, ri) => {
+        const cells = r.split('|').slice(1, -1).map(c => c.trim()).filter((c,ci,arr) => true);
+        if (cells.every(c => /^-+$/.test(c))) return '';
+        const tag = ri === 0 ? 'th' : 'td';
+        return '<tr>' + cells.map(c => `<${tag}>${fmt(c)}</${tag}>`).join('') + '</tr>';
+      }).join('') + '</table>'; tbl = [];
+    };
+    let para = [];
+    const flushP = () => { if (para.length) { out += '<p>' + para.map(fmt).join('<br>') + '</p>'; para = []; } };
+    lines.forEach(ln => {
+      if (ln.trim().startsWith('|')) { flushP(); tbl.push(ln.trim()); }
+      else if (ln.trim() === '') { flushT(); flushP(); }
+      else { flushT(); para.push(ln); }
+    });
+    flushT(); flushP();
+  });
+  return '<div class="theory">' + out + '</div>';
+}
+function shuffle(a) { a = a.slice(); for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
+function vib(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+function todayStr() { return new Date().toDateString(); }
+function bumpStreak() {
+  const t = todayStr();
+  if (S.lastDay === t) return;
+  const y = new Date(); y.setDate(y.getDate()-1);
+  S.streak = (S.lastDay === y.toDateString()) ? S.streak + 1 : 1;
+  S.lastDay = t;
+}
+
+/* ================== навигация ================== */
+let TAB = 'home';
+document.getElementById('nav').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  TAB = b.dataset.tab; render();
+});
+function setNav() {
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('cur', b.dataset.tab === TAB));
+}
+function render() {
+  document.body.classList.remove('inlesson');
+  setNav();
+  if (TAB === 'home') renderHome();
+  else if (TAB === 'tickets') renderTickets();
+  else if (TAB === 'exam') renderExamIntro();
+  else renderProfile();
+  window.scrollTo(0, 0);
+}
+
+/* ================== главная: путь ================== */
+function renderHome() {
+  let h = `<div class="topbar">
+    <span class="stat-fire">🔥 ${S.streak}</span>
+    <span class="stat-xp">⚡ ${S.xp} XP</span>
+    <span class="stat-day">📚 ${doneCount()}/${ALL_LESSONS.length}</span>
+  </div>`;
+  const offsets = [0, -70, -40, 40, 70];
+  COURSE.forEach(u => {
+    const total = u.lessons.length, done = u.lessons.filter(l => S.done[l.id]).length;
+    h += `<div class="unit-head" style="background:${u.color}">
+      <div class="day-tag">День ${u.day} · ${done}/${total}</div>
+      <h2>${u.icon} ${esc(u.title)}</h2><p>${esc(u.desc)}</p>
+    </div><div class="path">`;
+    u.lessons.forEach((l, i) => {
+      const done = !!S.done[l.id];
+      const unlocked = isUnlocked(l.id);
+      const cls = done ? 'done' : (unlocked ? 'active' : 'locked');
+      const off = offsets[i % offsets.length];
+      h += `<div class="node-row" style="transform:translateX(${off}px)">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <button class="node ${cls}" style="--c:${u.color}" data-l="${l.id}">
+            ${done ? l.icon : (unlocked ? l.icon : '🔒')}
+            ${done ? '<span class="check">✓</span>' : ''}
+          </button>
+          <div class="node-label">${esc(l.title)}</div>
+        </div></div>`;
+    });
+    h += `</div>`;
+  });
+  h += `<p style="text-align:center;color:var(--mut);font-size:13px;padding:10px 30px 30px">
+    Сделано по конспекту и 45 экзаменационным вопросам · удачи на экзамене! 💪</p>`;
+  app.innerHTML = h;
+  app.querySelectorAll('.node').forEach(n => n.addEventListener('click', () => {
+    const id = n.dataset.l;
+    if (!isUnlocked(id)) { n.classList.add('shake'); setTimeout(()=>n.classList.remove('shake'), 350); return; }
+    openLessonSheet(id);
+  }));
+}
+
+function openLessonSheet(id) {
+  const { u, l } = ALL_LESSONS[lessonIndex(id)];
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="sheet">
+    <h3>${l.icon} ${esc(l.title)}</h3>
+    <div class="sub">День ${u.day} · ${l.ex.length} заданий · +10 XP${S.done[id] ? ' · пройден ✓' : ''}</div>
+    <button class="btn blue" data-a="theory">📖 Конспект</button>
+    <button class="btn" data-a="start">${S.done[id] ? 'Повторить' : 'Начать урок'}</button>
+    <button class="btn ghost" data-a="close">Закрыть</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => {
+    if (e.target === ov) { ov.remove(); return; }
+    const a = e.target.closest('[data-a]'); if (!a) return;
+    if (a.dataset.a === 'close') ov.remove();
+    if (a.dataset.a === 'theory') { ov.remove(); openTheory(id, true); }
+    if (a.dataset.a === 'start') { ov.remove(); startLesson(id); }
+  });
+}
+function openTheory(id, offerStart) {
+  const { l } = ALL_LESSONS[lessonIndex(id)];
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="sheet">
+    <h3>📖 ${esc(l.title)}</h3><div class="sub">Конспект перед уроком</div>
+    ${theoryHTML(l.th)}
+    ${offerStart ? '<button class="btn" data-a="start" style="margin-top:14px">Начать урок</button>' : ''}
+    <button class="btn ghost" data-a="close" style="margin-top:12px">Закрыть</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => {
+    if (e.target === ov) { ov.remove(); return; }
+    const a = e.target.closest('[data-a]'); if (!a) return;
+    ov.remove();
+    if (a.dataset.a === 'start') startLesson(id);
+  });
+}
+
+/* ================== движок урока ================== */
+let L = null; // текущий урок
+function startLesson(id, examMode) {
+  const { l } = examMode ? { l: id } : ALL_LESSONS[lessonIndex(id)];
+  L = {
+    id: examMode ? '__exam__' : l.id,
+    exam: !!examMode,
+    queue: l.ex.map((e, i) => i),
+    ex: l.ex,
+    pos: 0, hearts: examMode ? Infinity : 4,
+    solved: new Set(), seenWrong: new Set(), firstTry: 0, mistakes: 0, answered: 0,
+  };
+  document.body.classList.add('inlesson');
+  showExercise();
+}
+function quitLesson() {
+  if (confirm('Выйти из урока? Прогресс урока не сохранится.')) { L = null; render(); }
+}
+function progressPct() { return Math.round(L.solved.size / L.ex.length * 100); }
+
+function showExercise() {
+  if (L.pos >= L.queue.length) { finishLesson(); return; }
+  const exi = L.queue[L.pos];
+  const ex = L.ex[exi];
+  const heartsHtml = L.exam ? `<span class="hearts">🎓</span>` :
+    `<span class="hearts">❤️ ${L.hearts}</span>`;
+  let body = '';
+  if (ex.t === 'c' || ex.t === 'tf') body = renderChoice(ex);
+  else if (ex.t === 'f') body = renderFill(ex);
+  else if (ex.t === 'm') body = renderMatch(ex);
+  else if (ex.t === 'o') body = renderOrder(ex);
+  app.innerHTML = `
+    <div class="lesson-top">
+      <button class="quit" id="quit">✕</button>
+      <div class="pbar"><div style="width:${progressPct()}%"></div></div>
+      ${heartsHtml}
+    </div>
+    <div class="exwrap">${body}</div>
+    <div class="checkbar" id="cbar">
+      <button class="btn" id="check" disabled>Проверить</button>
+    </div>`;
+  document.getElementById('quit').onclick = quitLesson;
+  bindExercise(ex);
+  window.scrollTo(0, 0);
+}
+
+/* ---------- choice / truefalse ---------- */
+function renderChoice(ex) {
+  let opts, correct;
+  if (ex.t === 'tf') { opts = ['Верно ✅','Неверно ❌']; correct = ex.a ? 0 : 1; L._map = [0,1]; }
+  else {
+    const idx = shuffle(ex.o.map((_, i) => i));
+    L._map = idx; opts = idx.map(i => ex.o[i]); correct = idx.indexOf(ex.a);
+  }
+  L._correct = correct;
+  return `<div class="extitle">${fmt(ex.q)}</div>
+    ${ex.code ? `<pre class="code">${hl(ex.code)}</pre>` : ''}
+    ${opts.map((o, i) => `<button class="opt" data-i="${i}">${fmt(o)}</button>`).join('')}`;
+}
+function bindChoice(ex) {
+  let sel = -1;
+  const btns = app.querySelectorAll('.opt');
+  btns.forEach(b => b.onclick = () => {
+    btns.forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel'); sel = +b.dataset.i;
+    checkBtn().disabled = false;
+  });
+  checkBtn().onclick = () => {
+    const ok = sel === L._correct;
+    btns[L._correct].classList.add('good');
+    if (!ok) btns[sel].classList.add('bad');
+    btns.forEach(b => b.style.pointerEvents = 'none');
+    feedback(ok, ex, ex.t === 'tf' ? (ex.a ? 'Верно' : 'Неверно') : ex.o[ex.a]);
+  };
+}
+
+/* ---------- fill (пропуск) ---------- */
+function renderFill(ex) {
+  L._fill = null;
+  const bank = shuffle(ex.bank);
+  L._bank = bank;
+  const q = fmt(ex.q).replace('___', '<span class="gap" id="gap">&nbsp;</span>');
+  return `<div class="extitle">Заполни пропуск</div>
+    <div class="fill-q">${q}</div>
+    ${ex.code ? `<pre class="code">${hl(ex.code)}</pre>` : ''}
+    <div class="bank">${bank.map((t, i) => `<button class="tokenbtn" data-i="${i}">${esc(t)}</button>`).join('')}</div>`;
+}
+function bindFill(ex) {
+  const gap = document.getElementById('gap');
+  const toks = app.querySelectorAll('.tokenbtn');
+  toks.forEach(b => b.onclick = () => {
+    toks.forEach(x => x.classList.remove('used'));
+    b.classList.add('used');
+    L._fill = L._bank[+b.dataset.i];
+    gap.textContent = L._fill;
+    checkBtn().disabled = false;
+  });
+  gap.onclick = () => { L._fill = null; gap.innerHTML = '&nbsp;'; toks.forEach(x => x.classList.remove('used')); checkBtn().disabled = true; };
+  checkBtn().onclick = () => {
+    const ok = L._fill === ex.a;
+    gap.style.color = ok ? 'var(--green)' : 'var(--red)';
+    feedback(ok, ex, ex.a);
+  };
+}
+
+/* ---------- match (пары) ---------- */
+function renderMatch(ex) {
+  const left = shuffle(ex.pairs.map((p, i) => ({ t: p[0], i })));
+  const right = shuffle(ex.pairs.map((p, i) => ({ t: p[1], i })));
+  L._mleft = left; L._mright = right; L._msolved = 0; L._mwrong = false;
+  const cells = [];
+  for (let r = 0; r < left.length; r++) {
+    cells.push(`<button class="mopt" data-side="l" data-p="${left[r].i}">${fmt(left[r].t)}</button>`);
+    cells.push(`<button class="mopt" data-side="r" data-p="${right[r].i}">${fmt(right[r].t)}</button>`);
+  }
+  return `<div class="extitle">${fmt(ex.q)}</div><div class="match-grid">${cells.join('')}</div>`;
+}
+function bindMatch(ex) {
+  let selL = null, selR = null;
+  const all = app.querySelectorAll('.mopt');
+  function tryMatch() {
+    if (!selL || !selR) return;
+    const a = selL, b = selR; selL = selR = null;
+    if (a.dataset.p === b.dataset.p) {
+      [a, b].forEach(x => { x.classList.remove('sel'); x.classList.add('off'); });
+      L._msolved++;
+      vib(10);
+      if (L._msolved === ex.pairs.length) {
+        feedback(!L._mwrong, ex, null, true); // пары: ошибка не отнимает сердце
+      }
+    } else {
+      L._mwrong = true; L.mistakes++;
+      [a, b].forEach(x => { x.classList.remove('sel'); x.classList.add('shake'); });
+      vib(60);
+      setTimeout(() => [a, b].forEach(x => x.classList.remove('shake')), 320);
+    }
+  }
+  all.forEach(b => b.onclick = () => {
+    const side = b.dataset.side;
+    if (side === 'l') { if (selL) selL.classList.remove('sel'); selL = b; }
+    else { if (selR) selR.classList.remove('sel'); selR = b; }
+    b.classList.add('sel');
+    tryMatch();
+  });
+  checkBtn().style.display = 'none';
+}
+
+/* ---------- order (порядок) ---------- */
+function renderOrder(ex) {
+  const bank = shuffle(ex.items.map((t, i) => ({ t, i })));
+  L._obank = bank; L._osel = [];
+  return `<div class="extitle">${fmt(ex.q)}</div>
+    ${ex.code ? `<pre class="code">${hl(ex.code)}</pre>` : ''}
+    <div class="slots" id="slots"></div>
+    <div class="bank" id="obank">${bank.map((b, i) => `<button class="tokenbtn" data-i="${i}">${fmt(b.t)}</button>`).join('')}</div>`;
+}
+function bindOrder(ex) {
+  const slots = document.getElementById('slots');
+  const bank = document.getElementById('obank');
+  function redraw() {
+    slots.innerHTML = L._osel.map((s, k) => `<button class="tokenbtn" data-k="${k}">${k+1}. ${fmt(s.t)}</button>`).join('');
+    slots.querySelectorAll('button').forEach(b => b.onclick = () => {
+      const s = L._osel.splice(+b.dataset.k, 1)[0];
+      bank.querySelector(`[data-i="${s.bi}"]`).classList.remove('used');
+      redraw();
+    });
+    checkBtn().disabled = L._osel.length !== ex.items.length;
+  }
+  bank.querySelectorAll('button').forEach(b => b.onclick = () => {
+    if (b.classList.contains('used')) return;
+    b.classList.add('used');
+    L._osel.push({ t: L._obank[+b.dataset.i].t, i: L._obank[+b.dataset.i].i, bi: +b.dataset.i });
+    redraw();
+  });
+  checkBtn().onclick = () => {
+    const ok = L._osel.every((s, k) => s.i === k);
+    feedback(ok, ex, ex.items.map((t,i)=>`${i+1}. ${t}`).join('  →  '));
+  };
+  redraw();
+}
+
+function bindExercise(ex) {
+  if (ex.t === 'c' || ex.t === 'tf') bindChoice(ex);
+  else if (ex.t === 'f') bindFill(ex);
+  else if (ex.t === 'm') bindMatch(ex);
+  else if (ex.t === 'o') bindOrder(ex);
+}
+function checkBtn() { return document.getElementById('check'); }
+
+/* ---------- проверка и фидбек ---------- */
+function feedback(ok, ex, correctText, noHeart) {
+  const exi = L.queue[L.pos];
+  L.answered++;
+  const bar = document.getElementById('cbar');
+  if (ok) {
+    L.solved.add(exi);
+    if (!L.seenWrong.has(exi)) L.firstTry++;
+    vib(15);
+    bar.className = 'checkbar ok';
+    bar.innerHTML = `<div class="fb"><div class="fico">✅</div><div>
+        <b class="ok-t">${['Отлично!','Верно!','Супер!','Именно так!','Красавчик!'][Math.floor(Math.random()*5)]}</b>
+        ${ex.w ? `<p>${fmt(ex.w)}</p>` : ''}
+      </div></div>
+      <button class="btn" id="next">Дальше</button>`;
+  } else {
+    L.seenWrong.add(exi);
+    if (!noHeart) { L.mistakes++; L.hearts--; } // для «пар» ошибки уже посчитаны и сердце не отнимаем
+    vib([60,40,60]);
+    if (!L.exam) L.queue.push(exi); // повторим в конце урока (на экзамене второго шанса нет)
+    bar.className = 'checkbar no';
+    bar.innerHTML = `<div class="fb"><div class="fico">❌</div><div>
+        <b class="no-t">Неверно</b>
+        ${correctText ? `<p><b>Правильный ответ:</b> ${fmt(correctText)}</p>` : ''}
+        ${ex.w ? `<p>${fmt(ex.w)}</p>` : ''}
+      </div></div>
+      <button class="btn ${L.hearts <= 0 && !L.exam ? 'red' : 'blue'}" id="next">${L.hearts <= 0 && !L.exam ? 'Сердечки кончились…' : 'Дальше'}</button>`;
+    const hb = document.querySelector('.hearts');
+    if (hb && !L.exam) hb.textContent = '❤️ ' + Math.max(0, L.hearts);
+  }
+  // обновить прогресс-бар
+  const pb = document.querySelector('.pbar > div');
+  if (pb) pb.style.width = progressPct() + '%';
+  document.getElementById('next').onclick = () => {
+    if (L.hearts <= 0 && !L.exam) { failLesson(); return; }
+    L.pos++;
+    showExercise();
+  };
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+function failLesson() {
+  const id = L.id; L = null;
+  app.innerHTML = `<div class="endscr">
+    <div class="big">💔</div>
+    <h2 style="color:var(--red)">Сердечки закончились</h2>
+    <p style="color:var(--mut);font-weight:700;margin-bottom:30px">Ошибки — часть обучения. Загляни в конспект и попробуй ещё раз!</p>
+    <button class="btn blue" id="th">📖 Конспект</button>
+    <button class="btn" id="retry">Попробовать снова</button>
+    <button class="btn ghost" id="home">На карту</button>
+  </div>`;
+  document.getElementById('retry').onclick = () => startLesson(id);
+  document.getElementById('th').onclick = () => openTheory(id, true);
+  document.getElementById('home').onclick = () => { render(); };
+}
+
+function finishLesson() {
+  const perfect = L.mistakes === 0 && L.seenWrong.size === 0;
+  const xp = 10 + (perfect ? 5 : 0);
+  const acc = Math.round(L.firstTry / L.ex.length * 100);
+  if (L.exam) { finishExam(acc); return; }
+  const first = !S.done[L.id];
+  S.done[L.id] = true;
+  if (perfect) S.perfect[L.id] = true;
+  S.xp += xp;
+  bumpStreak();
+  save();
+  const id = L.id; L = null;
+  app.innerHTML = `<div class="endscr">
+    <div class="big">${perfect ? '🏅' : '🎉'}</div>
+    <h2>Урок пройден!</h2>
+    <div class="endcards">
+      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +${xp} XP</div></div>
+      <div class="endcard" style="background:var(--green)"><div class="in"><small style="color:var(--green)">Точность</small>🎯 ${acc}%</div></div>
+      <div class="endcard" style="background:#ff9600"><div class="in"><small style="color:#ff9600">Стрик</small>🔥 ${S.streak}</div></div>
+    </div>
+    ${perfect ? '<p style="color:var(--gold);font-weight:900;margin-bottom:20px">Без единой ошибки! +5 бонусных XP</p>' : ''}
+    <button class="btn" id="cont">Продолжить</button>
+  </div>`;
+  confetti();
+  document.getElementById('cont').onclick = () => render();
+}
+function confetti() {
+  const em = ['🎉','⭐','✨','💚','🧩','🏆'];
+  for (let i = 0; i < 24; i++) {
+    const s = document.createElement('span');
+    s.className = 'confetti'; s.textContent = em[i % em.length];
+    s.style.left = Math.random()*100 + 'vw';
+    s.style.animationDuration = (1.4 + Math.random()*1.6) + 's';
+    s.style.animationDelay = (Math.random()*0.5) + 's';
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 3500);
+  }
+}
+
+/* ================== экзамен ================== */
+function renderExamIntro() {
+  app.innerHTML = `<div class="page">
+    <h1>🎓 Пробный экзамен</h1>
+    <div class="sub">20 случайных вопросов со всего курса. Без сердечек — как на настоящем экзамене.</div>
+    <div class="statgrid">
+      <div class="statcard"><div class="v">${S.bestExam}%</div><div class="l">Лучший результат</div></div>
+      <div class="statcard"><div class="v">${S.examCount}</div><div class="l">Попыток</div></div>
+    </div>
+    <button class="btn" id="go">Начать экзамен</button>
+    <p style="color:var(--mut);font-size:14px;margin-top:16px;font-weight:700">
+      💡 Совет: сдай пробник на 80%+ хотя бы два раза подряд — и на экзамене будет спокойно.</p>
+  </div>`;
+  document.getElementById('go').onclick = () => {
+    const pool = [];
+    COURSE.forEach(u => u.lessons.forEach(l => l.ex.forEach(e => pool.push(e))));
+    const pick = shuffle(pool).slice(0, 20);
+    startLesson({ ex: pick }, true);
+  };
+}
+function finishExam(acc) {
+  L = null;
+  S.examCount++;
+  const best = acc > S.bestExam;
+  if (best) S.bestExam = acc;
+  S.xp += acc >= 80 ? 20 : 10;
+  bumpStreak();
+  save();
+  const verdict = acc >= 90 ? 'Блестяще! Ты готов(а) 🏆' : acc >= 75 ? 'Отлично, почти готов(а)!' : acc >= 50 ? 'Неплохо, но повтори слабые темы' : 'Стоит пройтись по урокам ещё раз';
+  app.innerHTML = `<div class="endscr">
+    <div class="big">${acc >= 75 ? '🏆' : acc >= 50 ? '💪' : '📚'}</div>
+    <h2>${acc}%</h2>
+    <p style="font-weight:900;font-size:19px;margin-bottom:8px">${verdict}</p>
+    ${best && S.examCount > 1 ? '<p style="color:var(--gold);font-weight:900">Новый рекорд!</p>' : ''}
+    <div class="endcards" style="margin-top:24px">
+      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +${acc >= 80 ? 20 : 10} XP</div></div>
+      <div class="endcard" style="background:var(--blue)"><div class="in"><small style="color:var(--blue)">Рекорд</small>🥇 ${S.bestExam}%</div></div>
+    </div>
+    <button class="btn" id="again">Ещё раз</button>
+    <button class="btn ghost" id="home">На карту</button>
+  </div>`;
+  if (acc >= 75) confetti();
+  document.getElementById('again').onclick = () => { TAB = 'exam'; render(); };
+  document.getElementById('home').onclick = () => { TAB = 'home'; render(); };
+}
+
+/* ================== билеты ================== */
+function renderTickets() {
+  const done = Object.values(S.tickets).filter(Boolean).length;
+  app.innerHTML = `<div class="page">
+    <h1>📋 Экзаменационные вопросы</h1>
+    <div class="sub">Отмечай, что уже разобрал: ${done}/${TICKETS.length}</div>
+    ${TICKETS.map((t, i) => `
+      <label class="ticket ${S.tickets[i] ? 'done' : ''}">
+        <input type="checkbox" data-i="${i}" ${S.tickets[i] ? 'checked' : ''}>
+        <span class="num">${i+1}.</span><span class="tx">${esc(t)}</span>
+      </label>`).join('')}
+  </div>`;
+  app.querySelectorAll('input[type=checkbox]').forEach(c => c.addEventListener('change', () => {
+    S.tickets[c.dataset.i] = c.checked; save(); renderTickets();
+  }));
+}
+
+/* ================== профиль ================== */
+function renderProfile() {
+  const perfect = Object.keys(S.perfect).length;
+  app.innerHTML = `<div class="page">
+    <h1>👤 Твой прогресс</h1>
+    <div class="sub">7 дней до экзамена — погнали!</div>
+    <div class="statgrid">
+      <div class="statcard"><div class="v">⚡ ${S.xp}</div><div class="l">Всего XP</div></div>
+      <div class="statcard"><div class="v">🔥 ${S.streak}</div><div class="l">Дней подряд</div></div>
+      <div class="statcard"><div class="v">📚 ${doneCount()}/${ALL_LESSONS.length}</div><div class="l">Уроков пройдено</div></div>
+      <div class="statcard"><div class="v">🏅 ${perfect}</div><div class="l">Идеальных уроков</div></div>
+      <div class="statcard"><div class="v">🎓 ${S.bestExam}%</div><div class="l">Лучший экзамен</div></div>
+      <div class="statcard"><div class="v">📋 ${Object.values(S.tickets).filter(Boolean).length}/45</div><div class="l">Билетов разобрано</div></div>
+    </div>
+    <button class="btn blue" id="unlock">${S.unlockAll ? '🔒 Вернуть последовательное прохождение' : '🔓 Разблокировать все уроки'}</button>
+    <button class="btn red" id="reset" style="margin-top:12px">Сбросить прогресс</button>
+    <p style="color:var(--mut);font-size:13px;margin-top:18px;font-weight:700">
+      План: 1 день = 1 юнит. Раздел «Экзамен» — пробник из 20 случайных вопросов. Уроки «📝 Экзамен: задачи» в дне 7 — разбор реальных типовых задач с листочка.</p>
+  </div>`;
+  document.getElementById('unlock').onclick = () => { S.unlockAll = !S.unlockAll; save(); renderProfile(); };
+  document.getElementById('reset').onclick = () => {
+    if (confirm('Точно сбросить весь прогресс?')) { localStorage.removeItem(KEY); S = load(); render(); }
+  };
+}
+
+render();
+</script>
+</body>
+</html>
