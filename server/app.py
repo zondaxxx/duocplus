@@ -1,14 +1,17 @@
-"""C++ Hero — Telegram Mini App: aiohttp-сервер (статика + API) + aiogram-бот."""
-import asyncio
+"""C++ Hero — Telegram Mini App: aiohttp (статика + API + webhook) + aiogram-бот."""
+import hashlib
 import json
 import logging
 import os
 import pathlib
+import re
 
+import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
 from . import storage
@@ -17,14 +20,62 @@ from .auth import validate_init_data
 log = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
-APP_URL = os.environ.get('APP_URL', 'https://tg.eu-cdn539.com')
+APP_URL = os.environ.get('APP_URL', 'https://tg.eu-cdn539.com').rstrip('/')
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAX_BODY = 256 * 1024
+MAX_CODE = 20_000
+
+WEBHOOK_SECRET = hashlib.sha256(('whsec:' + BOT_TOKEN).encode()).hexdigest()[:40]
+WEBHOOK_PATH = '/tg/webhook'
+
+bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
+dp = Dispatcher()
+
+_http: aiohttp.ClientSession | None = None
+_compiler = 'gcc-head'  # подберём свежий gcc на старте
+
+# ---------------- запуск кода через Wandbox ----------------
+
+async def _pick_compiler() -> None:
+    global _compiler
+    try:
+        async with _http.get('https://wandbox.org/api/list.json',
+                             timeout=aiohttp.ClientTimeout(total=15)) as r:
+            data = json.loads(await r.text())  # Wandbox отдаёт нестандартный mimetype
+        best, best_ver = None, ()
+        for c in data:
+            name = c.get('name', '')
+            if c.get('language') == 'C++' and name.startswith('gcc-') and name != 'gcc-head':
+                ver = tuple(int(x) for x in re.findall(r'\d+', name))
+                if ver > best_ver:
+                    best, best_ver = name, ver
+        if best:
+            _compiler = best
+    except Exception as e:
+        log.warning('compiler list failed, using %s: %s', _compiler, e)
+    log.info('c++ compiler: %s', _compiler)
+
+
+async def _wandbox(code: str) -> dict:
+    payload = {
+        'code': code,
+        'compiler': _compiler,
+        'options': '',
+        'compiler-option-raw': '-std=c++17',
+        'stdin': '',
+        'save': False,
+    }
+    headers = {'User-Agent': 'cpp-hero/1.0', 'Accept': 'application/json'}
+    async with _http.post('https://wandbox.org/api/compile.json', json=payload, headers=headers,
+                          timeout=aiohttp.ClientTimeout(total=25)) as r:
+        if r.status != 200:
+            raise RuntimeError(f'wandbox http {r.status}')
+        return json.loads(await r.text())  # mimetype может быть не application/json
 
 # ---------------- API ----------------
 
 def _auth_from_request(request: web.Request, body: dict | None = None) -> dict | None:
-    """initData берём из заголовка Authorization: tma <initData> или из тела (sendBeacon)."""
+    """initData из заголовка Authorization: tma <initData> или из тела (sendBeacon)."""
     auth = request.headers.get('Authorization', '')
     init_data = auth[4:] if auth.startswith('tma ') else None
     if not init_data and body and isinstance(body.get('initData'), str):
@@ -32,6 +83,11 @@ def _auth_from_request(request: web.Request, body: dict | None = None) -> dict |
     if not init_data:
         return None
     return validate_init_data(init_data, BOT_TOKEN)
+
+
+def _client_ip(request: web.Request) -> str:
+    fwd = request.headers.get('X-Forwarded-For', '')
+    return (fwd.split(',')[0].strip() or request.remote or '?')
 
 
 async def api_health(_: web.Request) -> web.Response:
@@ -64,6 +120,44 @@ async def api_save_progress(request: web.Request) -> web.Response:
     return web.json_response({'ok': True})
 
 
+async def api_run(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return web.json_response({'ok': False, 'error': 'bad json'}, status=400)
+    code = body.get('code')
+    if not isinstance(code, str) or not code.strip():
+        return web.json_response({'ok': False, 'error': 'нет кода'}, status=400)
+    if len(code) > MAX_CODE:
+        return web.json_response({'ok': False, 'error': 'код слишком большой'}, status=400)
+
+    user = _auth_from_request(request, body)
+    ident = str(user['id']) if user else 'ip:' + _client_ip(request)
+    if not await storage.rate_ok(f'run:{ident}', 3):
+        return web.json_response({'ok': False, 'error': 'слишком часто, подожди пару секунд'}, status=429)
+
+    cache_key = 'runcache:' + hashlib.sha256((_compiler + '|' + code).encode()).hexdigest()
+    cached = await storage.kv_get(cache_key)
+    if cached:
+        return web.json_response(json.loads(cached))
+
+    try:
+        data = await _wandbox(code)
+    except Exception as e:
+        log.warning('wandbox error: %s', e)
+        return web.json_response({'ok': False, 'error': 'компилятор недоступен, попробуй ещё раз'}, status=502)
+
+    result = {
+        'ok': True,
+        'compile_error': (data.get('compiler_error') or '').strip(),
+        'output': data.get('program_output') or '',
+        'stderr': (data.get('program_error') or '').strip(),
+        'status': data.get('status'),
+    }
+    await storage.kv_set(cache_key, json.dumps(result), 86400)
+    return web.json_response(result)
+
+
 async def page_index(_: web.Request) -> web.FileResponse:
     return web.FileResponse(ROOT / 'index.html')
 
@@ -74,19 +168,17 @@ async def page_data(_: web.Request) -> web.FileResponse:
 
 def build_web_app() -> web.Application:
     app = web.Application(client_max_size=MAX_BODY)
-    # статика отдаётся только явными маршрутами — server/ и .env наружу не торчат
+    # отдаём только явные маршруты — server/ и .env наружу не торчат
     app.router.add_get('/', page_index)
     app.router.add_get('/index.html', page_index)
     app.router.add_get('/data.js', page_data)
     app.router.add_get('/api/health', api_health)
     app.router.add_get('/api/progress', api_get_progress)
     app.router.add_post('/api/progress', api_save_progress)
+    app.router.add_post('/api/run', api_run)
     return app
 
 # ---------------- бот ----------------
-
-dp = Dispatcher()
-
 
 def _app_button() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
@@ -99,8 +191,10 @@ async def cmd_start(message: types.Message) -> None:
     await message.answer(
         '<b>C++ Hero</b> — подготовка к экзамену по ООП/C++ за неделю в стиле Duolingo 🎮\n\n'
         '• 8 дней · 40 уроков · 310 заданий\n'
+        '• 🧪 песочница: код реально компилируется и запускается\n'
+        '• 🧠 интервальные повторения слабых тем\n'
         '• сердечки, XP, стрик и пробный экзамен\n'
-        '• прогресс привязан к твоему Telegram и общий на всех устройствах\n\n'
+        '• прогресс привязан к Telegram и общий на всех устройствах\n\n'
         'Команды: /stats — твой прогресс, /top — таблица лидеров',
         reply_markup=_app_button(),
     )
@@ -113,11 +207,13 @@ async def cmd_stats(message: types.Message) -> None:
         await message.answer('Ты ещё не начинал 🙃 Жми кнопку и вперёд!', reply_markup=_app_button())
         return
     done = len(progress.get('done') or {})
+    code = len(progress.get('codeDone') or {})
     await message.answer(
         f'📊 <b>Твой прогресс</b>\n\n'
         f'⚡ XP: <b>{progress.get("xp", 0)}</b>\n'
         f'🔥 Стрик: <b>{progress.get("streak", 0)}</b> дн.\n'
         f'📚 Уроков пройдено: <b>{done}/40</b>\n'
+        f'🧪 Код-челленджей: <b>{code}/6</b>\n'
         f'🎓 Лучший пробный экзамен: <b>{progress.get("bestExam", 0)}%</b>',
         reply_markup=_app_button(),
     )
@@ -138,20 +234,37 @@ async def cmd_top(message: types.Message) -> None:
 
 # ---------------- запуск ----------------
 
-async def main() -> None:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+async def _on_startup(app: web.Application) -> None:
+    global _http
     await storage.init()
+    _http = aiohttp.ClientSession()
+    await _pick_compiler()
+    try:
+        await bot.set_webhook(
+            f'{APP_URL}{WEBHOOK_PATH}',
+            secret_token=WEBHOOK_SECRET,
+            drop_pending_updates=True,
+            allowed_updates=dp.resolve_used_update_types(),
+        )
+        log.info('webhook set: %s%s', APP_URL, WEBHOOK_PATH)
+    except Exception as e:
+        log.error('set_webhook failed: %s', e)
 
+
+async def _on_cleanup(app: web.Application) -> None:
+    if _http is not None:
+        await _http.close()
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
     app = build_web_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8080)
-    await site.start()
-    log.info('web app on :8080, mini app url: %s', APP_URL)
-
-    bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
-    await dp.start_polling(bot)
+    SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=WEBHOOK_SECRET).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+    app.on_startup.append(_on_startup)
+    app.on_cleanup.append(_on_cleanup)
+    web.run_app(app, host='0.0.0.0', port=8080)
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()

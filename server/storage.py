@@ -97,6 +97,34 @@ async def save(user: dict, progress: dict) -> None:
             pass
 
 
+async def kv_get(key: str) -> str | None:
+    if _redis is None:
+        return None
+    try:
+        return await _redis.get(key)
+    except Exception:
+        return None
+
+
+async def kv_set(key: str, value: str, ttl: int) -> None:
+    if _redis is None:
+        return
+    try:
+        await _redis.set(key, value, ex=ttl)
+    except Exception:
+        pass
+
+
+async def rate_ok(key: str, ttl: int) -> bool:
+    """True если запрос разрешён. Ставит ключ с NX — следующий в окне ttl получит False."""
+    if _redis is None:
+        return True
+    try:
+        return bool(await _redis.set(key, '1', ex=ttl, nx=True))
+    except Exception:
+        return True
+
+
 async def top(limit: int = 10) -> list[dict]:
     rows = await _pool.fetch(
         """

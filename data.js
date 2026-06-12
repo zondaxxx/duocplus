@@ -996,3 +996,139 @@ window.TICKETS = [
 'Общие принципы разработки ООП',
 'Тестирование ООП'
 ];
+
+// Код-челленджи для песочницы: допиши / исправь код, вывод сверяется с expect
+window.CODE_CHALLENGES = [
+{
+  id: 'cc_operator',
+  icon: '➕',
+  title: 'Перегрузи operator<<',
+  prompt: 'Сделай так, чтобы вывод объекта Point печатал «(3, 4)».',
+  hint: 'Добавь friend std::ostream& operator<<(std::ostream&, const Point&).',
+  starter:
+`#include <iostream>
+
+struct Point {
+    int x, y;
+    Point(int x, int y) : x(x), y(y) {}
+    // TODO: сделай так, чтобы заработал  std::cout << p;
+    //       и печаталось ровно:  (3, 4)
+};
+
+int main() {
+    Point p(3, 4);
+    std::cout << p;
+    return 0;
+}`,
+  expect: '(3, 4)'
+},
+{
+  id: 'cc_virtual',
+  icon: '🐶',
+  title: 'Переопредели виртуальный метод',
+  prompt: 'Пёс должен говорить «Woof». Переопредели sound() в классе Dog.',
+  hint: 'override у sound(); вызов идёт через указатель на базовый класс.',
+  starter:
+`#include <iostream>
+#include <string>
+
+struct Animal {
+    virtual std::string sound() const { return "..."; }
+    void speak() const { std::cout << sound() << "\\n"; }
+    virtual ~Animal() = default;
+};
+
+struct Dog : Animal {
+    // TODO: переопредели sound(), чтобы возвращалось "Woof"
+};
+
+int main() {
+    Animal* a = new Dog();
+    a->speak();          // должно вывести: Woof
+    delete a;
+}`,
+  expect: 'Woof'
+},
+{
+  id: 'cc_template',
+  icon: '🧩',
+  title: 'Напиши шаблон функции',
+  prompt: 'Реализуй myMax, возвращающий больший из двух аргументов любого типа.',
+  hint: 'template <typename T> T myMax(T a, T b) { ... }',
+  starter:
+`#include <iostream>
+
+// TODO: напиши здесь шаблон функции myMax,
+//       чтобы заработали оба вызова ниже
+
+int main() {
+    std::cout << myMax(3, 9) << " " << myMax(2.5, 1.5) << "\\n";
+}`,
+  expect: '9 2.5'
+},
+{
+  id: 'cc_fixerr',
+  icon: '🔧',
+  title: 'Найди и исправь ошибки',
+  prompt: 'Код не компилируется. Исправь так, чтобы вывелось «12».',
+  hint: 'Точка с запятой ставится после оператора return и после объявления класса.',
+  starter:
+`#include <iostream>
+
+struct Box {
+    int w, h;
+    int area() { return w * h }   // что-то забыли
+}                                  // и здесь тоже
+
+int main() {
+    Box b{3, 4};
+    std::cout << b.area() << "\\n";   // должно вывести: 12
+}`,
+  expect: '12'
+},
+{
+  id: 'cc_increment',
+  icon: '⬆️',
+  title: 'Префиксный operator++',
+  prompt: 'Добавь префиксный operator++, увеличивающий x и y на 1.',
+  hint: 'Vec& operator++() { ++x; ++y; return *this; }',
+  starter:
+`#include <iostream>
+
+struct Vec {
+    int x = 0, y = 0;
+    // TODO: добавь префиксный operator++ (увеличивает x и y на 1)
+};
+
+int main() {
+    Vec v;
+    ++v; ++v;
+    std::cout << v.x << " " << v.y << "\\n";  // 2 2
+}`,
+  expect: '2 2'
+},
+{
+  id: 'cc_static',
+  icon: '🗿',
+  title: 'Статическое поле-счётчик',
+  prompt: 'Определи статическое поле count вне класса, чтобы счётчик объектов заработал.',
+  hint: 'int Widget::count = 0; — определение пишется в глобальной области.',
+  starter:
+`#include <iostream>
+
+struct Widget {
+    static int count;
+    Widget()  { count++; }
+    ~Widget() { count--; }
+};
+
+// TODO: определи статическое поле count (инициализируй нулём)
+
+int main() {
+    Widget a, b;
+    { Widget c; std::cout << Widget::count << "\\n"; }  // 3
+    std::cout << Widget::count << "\\n";                 // 2
+}`,
+  expect: '3\n2'
+}
+];

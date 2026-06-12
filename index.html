@@ -197,12 +197,52 @@ code.inline { background: #0d1418; border: 1px solid var(--line); border-radius:
 .statcard { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 16px; }
 .statcard .v { font-size: 26px; font-weight: 900; }
 .statcard .l { font-size: 13px; color: var(--mut); font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+
+/* карточка повторения на главной */
+.srs-card { margin: 14px 12px 0; border-radius: var(--r); padding: 16px 18px; background: linear-gradient(120deg,#7e3ff2,#b14bff); color:#fff; box-shadow: 0 4px 0 rgba(0,0,0,.3); display:flex; align-items:center; gap:14px; }
+.srs-card .ic { font-size: 34px; }
+.srs-card .tx b { font-size: 17px; font-weight: 900; display:block; }
+.srs-card .tx span { font-size: 13px; opacity:.92; font-weight:700; }
+.srs-card .go { margin-left:auto; background:#fff; color:#8a2be2; font-weight:900; padding:9px 14px; border-radius:12px; font-size:13px; white-space:nowrap; }
+
+/* карточки на вкладке «Код» */
+.codecard { display:flex; gap:12px; align-items:flex-start; background: var(--card); border:2px solid var(--line); border-bottom-width:4px; border-radius:14px; padding:14px; margin-bottom:11px; text-align:left; width:100%; transition:transform .1s; }
+.codecard:active { transform: translateY(2px); }
+.codecard.solved { border-color: var(--green); }
+.codecard .cic { font-size:26px; flex:none; }
+.codecard .ct b { font-size:16px; font-weight:900; display:block; margin-bottom:2px; }
+.codecard .ct span { font-size:13.5px; color:var(--mut); font-weight:700; }
+.codecard .cdone { margin-left:auto; color:var(--green); font-weight:900; font-size:18px; flex:none; }
+
+/* редактор кода */
+.editor-wrap { padding: 14px 14px 160px; }
+.editor-q { font-size:16px; font-weight:700; margin-bottom:12px; line-height:1.5; }
+textarea.editor {
+  width:100%; min-height:230px; background:#0d1418; color:#e6f0f5; border:2px solid var(--line);
+  border-radius:12px; padding:12px 14px; font-family:'SF Mono',Menlo,Consolas,monospace;
+  font-size:13px; line-height:1.55; resize:vertical; white-space:pre; tab-size:4; -moz-tab-size:4;
+  outline:none; caret-color: var(--green);
+}
+textarea.editor:focus { border-color: var(--blue); }
+.run-out {
+  margin-top:12px; background:#0a0f12; border:2px solid var(--line); border-radius:12px;
+  padding:11px 14px; font-family:'SF Mono',Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5;
+  white-space:pre-wrap; word-break:break-word; min-height:46px; color:#cfe3ec;
+}
+.run-out.err { border-color: var(--red); color:#ffb4b4; }
+.run-out.good { border-color: var(--green); color:#bff59a; }
+.run-label { font-size:12px; color:var(--mut); font-weight:800; text-transform:uppercase; letter-spacing:.6px; margin:14px 2px 6px; }
+.editor-bar { position: fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:560px; padding:14px 14px max(18px,env(safe-area-inset-bottom)); background:var(--bg); border-top:2px solid var(--line); z-index:45; display:flex; gap:10px; }
+.editor-bar .btn { margin:0; }
+.spin { display:inline-block; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <div id="wrap"><div id="app"></div></div>
 <nav id="nav">
   <button data-tab="home" title="Путь">🛤️</button>
+  <button data-tab="code" title="Код">🧪</button>
   <button data-tab="exam" title="Экзамен">🎓</button>
   <button data-tab="tickets" title="Билеты">📋</button>
   <button data-tab="me" title="Профиль">👤</button>
@@ -233,6 +273,13 @@ function mergeProgress(a, b) { // объединение локального и
   out.done = Object.assign({}, b.done, a.done);
   out.perfect = Object.assign({}, b.perfect, a.perfect);
   out.tickets = Object.assign({}, b.tickets, a.tickets);
+  out.codeDone = Object.assign({}, b.codeDone, a.codeDone);
+  // SRS: для каждой карточки берём запись с более свежим last
+  out.srs = Object.assign({}, b.srs);
+  for (const g in (a.srs || {})) {
+    const ea = a.srs[g], eb = (b.srs || {})[g];
+    out.srs[g] = (!eb || (ea.last || 0) >= (eb.last || 0)) ? ea : eb;
+  }
   return out;
 }
 let syncTimer = null;
@@ -270,14 +317,44 @@ window.addEventListener('visibilitychange', () => {
 const KEY = 'cppduo_v1';
 let S = load();
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return s; } catch(e) {}
-  return { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0 };
+  const base = { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {} };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return Object.assign(base, s, { srs: s.srs || {}, codeDone: s.codeDone || {} }); } catch(e) {}
+  return base;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} scheduleSync(); }
 
 const ALL_LESSONS = [];
 COURSE.forEach(u => u.lessons.forEach(l => ALL_LESSONS.push({ u, l })));
 function lessonIndex(id) { return ALL_LESSONS.findIndex(x => x.l.id === id); }
+
+/* ---- стабильные ID упражнений + индекс для интервальных повторений ---- */
+const EX_BY_ID = {};
+COURSE.forEach(u => u.lessons.forEach(l => l.ex.forEach((e, i) => {
+  e._gid = l.id + '#' + i;
+  e._lesson = l.title;
+  EX_BY_ID[e._gid] = e;
+})));
+
+// SM-2-lite: интервалы в днях по числу успешных повторов подряд
+const SRS_STEPS = [1, 2, 4, 8, 16, 30];
+function srsLapse(gid) { // ошибка: карточка снова «горит»
+  const e = S.srs[gid] || { reps: 0, lapses: 0 };
+  e.reps = 0; e.lapses = (e.lapses || 0) + 1;
+  e.due = Date.now(); e.last = Date.now();
+  S.srs[gid] = e; save();
+}
+function srsAdvance(gid) { // верный ответ: отодвигаем повтор дальше
+  const e = S.srs[gid]; if (!e) return;
+  const days = SRS_STEPS[Math.min(e.reps || 0, SRS_STEPS.length - 1)];
+  e.reps = (e.reps || 0) + 1;
+  e.due = Date.now() + days * 86400000; e.last = Date.now();
+  S.srs[gid] = e; save();
+}
+function dueIds() {
+  const now = Date.now();
+  return Object.keys(S.srs).filter(g => EX_BY_ID[g] && (S.srs[g].due || 0) <= now);
+}
+function weakCount() { return dueIds().length; }
 function isUnlocked(id) {
   if (S.unlockAll) return true;
   const i = lessonIndex(id);
@@ -353,6 +430,7 @@ function render() {
   document.body.classList.remove('inlesson');
   setNav();
   if (TAB === 'home') renderHome();
+  else if (TAB === 'code') renderCode();
   else if (TAB === 'tickets') renderTickets();
   else if (TAB === 'exam') renderExamIntro();
   else renderProfile();
@@ -366,6 +444,14 @@ function renderHome() {
     <span class="stat-xp">⚡ ${S.xp} XP</span>
     <span class="stat-day">📚 ${doneCount()}/${ALL_LESSONS.length}</span>
   </div>`;
+  const weak = weakCount();
+  if (weak > 0) {
+    h += `<button class="srs-card" id="srscard">
+      <span class="ic">🧠</span>
+      <span class="tx"><b>Прокачать слабое</b><span>${weak} ${plural(weak, 'карточка', 'карточки', 'карточек')} на повторение — закрепи то, где ошибался</span></span>
+      <span class="go">Повторить →</span>
+    </button>`;
+  }
   const offsets = [0, -70, -40, 40, 70];
   COURSE.forEach(u => {
     const total = u.lessons.length, done = u.lessons.filter(l => S.done[l.id]).length;
@@ -392,11 +478,19 @@ function renderHome() {
   h += `<p style="text-align:center;color:var(--mut);font-size:13px;padding:10px 30px 30px">
     Сделано по конспекту и 45 экзаменационным вопросам · удачи на экзамене! 💪</p>`;
   app.innerHTML = h;
+  const sc = document.getElementById('srscard');
+  if (sc) sc.onclick = startReview;
   app.querySelectorAll('.node').forEach(n => n.addEventListener('click', () => {
     const id = n.dataset.l;
     if (!isUnlocked(id)) { n.classList.add('shake'); setTimeout(()=>n.classList.remove('shake'), 350); return; }
     openLessonSheet(id);
   }));
+}
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
 }
 
 function openLessonSheet(id) {
@@ -437,22 +531,30 @@ function openTheory(id, offerStart) {
 }
 
 /* ================== движок урока ================== */
-let L = null; // текущий урок
-function startLesson(id, examMode) {
-  const { l } = examMode ? { l: id } : ALL_LESSONS[lessonIndex(id)];
+let L = null; // текущая сессия
+// mode: undefined='урок' | 'exam'='пробный экзамен' | 'review'='повторение слабого'
+function startLesson(idOrObj, mode) {
+  const isObj = typeof idOrObj === 'object';
+  const l = isObj ? idOrObj : ALL_LESSONS[lessonIndex(idOrObj)].l;
+  const exam = mode === 'exam', review = mode === 'review';
   L = {
-    id: examMode ? '__exam__' : l.id,
-    exam: !!examMode,
+    id: isObj ? '__' + (mode || 'session') + '__' : l.id,
+    exam, review,
     queue: l.ex.map((e, i) => i),
     ex: l.ex,
-    pos: 0, hearts: examMode ? Infinity : 4,
+    pos: 0, hearts: (exam || review) ? Infinity : 4,
     solved: new Set(), seenWrong: new Set(), firstTry: 0, mistakes: 0, answered: 0,
   };
   document.body.classList.add('inlesson');
   showExercise();
 }
+function startReview() {
+  const ids = shuffle(dueIds()).slice(0, 15);
+  if (!ids.length) { render(); return; }
+  startLesson({ ex: ids.map(g => EX_BY_ID[g]) }, 'review');
+}
 function quitLesson() {
-  if (confirm('Выйти из урока? Прогресс урока не сохранится.')) { L = null; render(); }
+  if (confirm('Выйти? Прогресс этой сессии не сохранится.')) { L = null; render(); }
 }
 function progressPct() { return Math.round(L.solved.size / L.ex.length * 100); }
 
@@ -461,6 +563,7 @@ function showExercise() {
   const exi = L.queue[L.pos];
   const ex = L.ex[exi];
   const heartsHtml = L.exam ? `<span class="hearts">🎓</span>` :
+    L.review ? `<span class="hearts">🧠</span>` :
     `<span class="hearts">❤️ ${L.hearts}</span>`;
   let body = '';
   if (ex.t === 'c' || ex.t === 'tf') body = renderChoice(ex);
@@ -633,6 +736,7 @@ function feedback(ok, ex, correctText, noHeart) {
   if (ok) {
     L.solved.add(exi);
     if (!L.seenWrong.has(exi)) L.firstTry++;
+    if (ex._gid && S.srs[ex._gid]) srsAdvance(ex._gid); // верный ответ отодвигает повтор
     vib(15);
     bar.className = 'checkbar ok';
     bar.innerHTML = `<div class="fb"><div class="fico">✅</div><div>
@@ -642,9 +746,11 @@ function feedback(ok, ex, correctText, noHeart) {
       <button class="btn" id="next">Дальше</button>`;
   } else {
     L.seenWrong.add(exi);
-    if (!noHeart) { L.mistakes++; L.hearts--; } // для «пар» ошибки уже посчитаны и сердце не отнимаем
+    if (!noHeart) L.mistakes++;
+    if (!noHeart && !L.exam && !L.review) L.hearts--; // сердца теряем только в обычном уроке
+    if (ex._gid) srsLapse(ex._gid); // ошибка ставит карточку в очередь повторений
     vib([60,40,60]);
-    if (!L.exam) L.queue.push(exi); // повторим в конце урока (на экзамене второго шанса нет)
+    if (!L.exam) L.queue.push(exi); // повторим в конце урока/повторения (на экзамене второго шанса нет)
     bar.className = 'checkbar no';
     bar.innerHTML = `<div class="fb"><div class="fico">❌</div><div>
         <b class="no-t">Неверно</b>
@@ -653,13 +759,13 @@ function feedback(ok, ex, correctText, noHeart) {
       </div></div>
       <button class="btn ${L.hearts <= 0 && !L.exam ? 'red' : 'blue'}" id="next">${L.hearts <= 0 && !L.exam ? 'Сердечки кончились…' : 'Дальше'}</button>`;
     const hb = document.querySelector('.hearts');
-    if (hb && !L.exam) hb.textContent = '❤️ ' + Math.max(0, L.hearts);
+    if (hb && !L.exam && !L.review) hb.textContent = '❤️ ' + Math.max(0, L.hearts);
   }
   // обновить прогресс-бар
   const pb = document.querySelector('.pbar > div');
   if (pb) pb.style.width = progressPct() + '%';
   document.getElementById('next').onclick = () => {
-    if (L.hearts <= 0 && !L.exam) { failLesson(); return; }
+    if (L.hearts <= 0 && !L.exam && !L.review) { failLesson(); return; }
     L.pos++;
     showExercise();
   };
@@ -686,6 +792,7 @@ function finishLesson() {
   const xp = 10 + (perfect ? 5 : 0);
   const acc = Math.round(L.firstTry / L.ex.length * 100);
   if (L.exam) { finishExam(acc); return; }
+  if (L.review) { finishReview(acc); return; }
   const first = !S.done[L.id];
   S.done[L.id] = true;
   if (perfect) S.perfect[L.id] = true;
@@ -765,6 +872,26 @@ function finishExam(acc) {
   document.getElementById('again').onclick = () => { TAB = 'exam'; render(); };
   document.getElementById('home').onclick = () => { TAB = 'home'; render(); };
 }
+function finishReview(acc) {
+  const n = L.ex.length; L = null;
+  S.xp += 8; bumpStreak(); save();
+  const left = weakCount();
+  app.innerHTML = `<div class="endscr">
+    <div class="big">🧠</div>
+    <h2>Повторение пройдено!</h2>
+    <p style="font-weight:900;font-size:18px;margin-bottom:6px">${n} ${plural(n, 'карточка закреплена', 'карточки закреплены', 'карточек закреплено')}</p>
+    <div class="endcards" style="margin-top:20px">
+      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +8 XP</div></div>
+      <div class="endcard" style="background:var(--purple)"><div class="in"><small style="color:var(--purple)">Осталось</small>🧠 ${left}</div></div>
+    </div>
+    <p style="color:var(--mut);font-size:13.5px;margin:16px 24px 24px;font-weight:700">Карточки вернутся на повтор через 1 → 2 → 4 → 8 дней. Чем чаще отвечаешь верно — тем реже видишь.</p>
+    ${left > 0 ? '<button class="btn" id="more">Повторить ещё</button>' : ''}
+    <button class="btn ${left > 0 ? 'ghost' : ''}" id="home">На карту</button>
+  </div>`;
+  confetti();
+  const m = document.getElementById('more'); if (m) m.onclick = startReview;
+  document.getElementById('home').onclick = () => { TAB = 'home'; render(); };
+}
 
 /* ================== билеты ================== */
 function renderTickets() {
@@ -798,6 +925,8 @@ function renderProfile() {
       <div class="statcard"><div class="v">🏅 ${perfect}</div><div class="l">Идеальных уроков</div></div>
       <div class="statcard"><div class="v">🎓 ${S.bestExam}%</div><div class="l">Лучший экзамен</div></div>
       <div class="statcard"><div class="v">📋 ${Object.values(S.tickets).filter(Boolean).length}/45</div><div class="l">Билетов разобрано</div></div>
+      <div class="statcard"><div class="v">🧪 ${Object.keys(S.codeDone).length}/${typeof CODE_CHALLENGES !== 'undefined' ? CODE_CHALLENGES.length : 0}</div><div class="l">Код-челленджей</div></div>
+      <div class="statcard"><div class="v">🧠 ${weakCount()}</div><div class="l">Карточек на повторе</div></div>
     </div>
     <button class="btn blue" id="unlock">${S.unlockAll ? '🔒 Вернуть последовательное прохождение' : '🔓 Разблокировать все уроки'}</button>
     <button class="btn red" id="reset" style="margin-top:12px">Сбросить прогресс</button>
@@ -808,6 +937,121 @@ function renderProfile() {
   document.getElementById('reset').onclick = () => {
     if (confirm('Точно сбросить весь прогресс?')) { localStorage.removeItem(KEY); S = load(); render(); }
   };
+}
+
+/* ================== песочница кода ================== */
+const PLAYGROUND_STARTER = `#include <iostream>
+
+int main() {
+    std::cout << "Hello, C++!" << std::endl;
+    return 0;
+}`;
+
+function renderCode() {
+  const done = Object.keys(S.codeDone).length;
+  let h = `<div class="page">
+    <h1>🧪 Песочница кода</h1>
+    <div class="sub">${TG ? 'Код реально компилируется и запускается (gcc, C++17)' : '📴 запуск доступен в Telegram-приложении'} · решено ${done}/${CODE_CHALLENGES.length}</div>
+    <button class="codecard" id="play">
+      <span class="cic">⚡</span>
+      <span class="ct"><b>Свободная песочница</b><span>Пиши любой C++ и запускай прямо здесь</span></span>
+    </button>
+    <div class="run-label" style="margin-top:18px">Челленджи: допиши / исправь код</div>`;
+  CODE_CHALLENGES.forEach((c, i) => {
+    const solved = !!S.codeDone[c.id];
+    h += `<button class="codecard ${solved ? 'solved' : ''}" data-c="${i}">
+      <span class="cic">${c.icon}</span>
+      <span class="ct"><b>${esc(c.title)}</b><span>${esc(c.prompt)}</span></span>
+      ${solved ? '<span class="cdone">✓</span>' : ''}
+    </button>`;
+  });
+  h += `</div>`;
+  app.innerHTML = h;
+  document.getElementById('play').onclick = openPlayground;
+  app.querySelectorAll('[data-c]').forEach(b => b.onclick = () => openCodeChallenge(+b.dataset.c));
+}
+function openPlayground() {
+  openEditor({ title: '⚡ Песочница', q: 'Пиши любой C++ код и жми «Запустить».', starter: PLAYGROUND_STARTER });
+}
+function openCodeChallenge(i) {
+  const c = CODE_CHALLENGES[i];
+  openEditor({ title: c.icon + ' ' + c.title, q: c.prompt + (c.hint ? '\n\n💡 ' + c.hint : ''), starter: c.starter, expect: c.expect, id: c.id });
+}
+function openEditor(opts) {
+  document.body.classList.add('inlesson');
+  app.innerHTML = `
+    <div class="lesson-top">
+      <button class="quit" id="quit">✕</button>
+      <div style="font-weight:900;font-size:16px;flex:1;text-align:center">${esc(opts.title)}</div>
+      <div style="width:30px"></div>
+    </div>
+    <div class="editor-wrap">
+      <div class="editor-q">${fmt(opts.q).replace(/\n/g, '<br>')}</div>
+      <textarea class="editor" id="editor" spellcheck="false">${esc(opts.starter)}</textarea>
+      <div class="run-label">Вывод программы</div>
+      <div class="run-out" id="out">— нажми «Запустить», чтобы скомпилировать и выполнить</div>
+    </div>
+    <div class="editor-bar">
+      <button class="btn blue" id="run" style="flex:1">▶ Запустить</button>
+      ${opts.expect != null ? '<button class="btn" id="check" style="flex:1">Проверить</button>' : ''}
+    </div>`;
+  document.getElementById('quit').onclick = () => { TAB = 'code'; render(); };
+  const ed = document.getElementById('editor');
+  const out = document.getElementById('out');
+  const runBtn = document.getElementById('run');
+  ed.addEventListener('keydown', e => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = ed.selectionStart, en = ed.selectionEnd;
+      ed.value = ed.value.slice(0, s) + '    ' + ed.value.slice(en);
+      ed.selectionStart = ed.selectionEnd = s + 4;
+    }
+  });
+  runBtn.onclick = () => execCode(ed.value, out, runBtn);
+  const chk = document.getElementById('check');
+  if (chk) chk.onclick = async () => {
+    const res = await execCode(ed.value, out, runBtn);
+    if (!res) return;
+    const got = (res.output || '').trim();
+    const want = String(opts.expect).trim();
+    if (!res.compile_error && got === want) {
+      out.className = 'run-out good';
+      const first = !S.codeDone[opts.id];
+      S.codeDone[opts.id] = true;
+      if (first) S.xp += 15;
+      bumpStreak(); save();
+      out.textContent = (got || '(пусто)') + '\n\n✅ Верно! ' + (first ? '+15 XP' : 'Задача уже была решена.');
+      confetti(); vib(15);
+    } else {
+      out.className = 'run-out err';
+      out.textContent = (res.compile_error ? res.compile_error.trim() + '\n\n' : '') +
+        'Получено:\n' + (got || '(пусто)') + '\n\nОжидалось:\n' + want;
+      vib([60, 40, 60]);
+    }
+  };
+  window.scrollTo(0, 0);
+}
+async function execCode(code, outEl, btn) {
+  outEl.className = 'run-out';
+  outEl.innerHTML = '<span class="spin">⏳</span> Компиляция и запуск…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/run', { method: 'POST', headers: tgHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ code }) });
+    if (r.status === 429) { outEl.className = 'run-out err'; outEl.textContent = '⏳ Слишком часто — подожди пару секунд.'; return null; }
+    const j = await r.json();
+    if (!j.ok) { outEl.className = 'run-out err'; outEl.textContent = '⚠️ ' + (j.error || 'не удалось запустить'); return null; }
+    let txt = '';
+    if (j.compile_error) txt += j.compile_error.trim() + '\n';
+    txt += (j.output || '');
+    if (j.stderr) txt += (txt ? '\n' : '') + j.stderr;
+    outEl.className = 'run-out' + (j.compile_error ? ' err' : '');
+    outEl.textContent = txt.trim() || '(программа ничего не вывела)';
+    return j;
+  } catch (e) {
+    outEl.className = 'run-out err';
+    outEl.textContent = TG ? '⚠️ нет связи с сервером' : '⚠️ запуск кода доступен только в Telegram-приложении';
+    return null;
+  } finally { btn.disabled = false; }
 }
 
 render();
