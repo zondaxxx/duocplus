@@ -31,7 +31,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* ===== верхняя панель ===== */
 .topbar {
   position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-around;
-  padding: 12px 16px; background: rgba(19,31,36,.92); backdrop-filter: blur(8px);
+  padding: 12px 16px; background: var(--bg);
   border-bottom: 2px solid var(--line); font-weight: 900; font-size: 18px;
 }
 .topbar span { display: flex; align-items: center; gap: 6px; }
@@ -100,10 +100,17 @@ body.picking #nav { display: none; }
 body.inlesson #nav { display: none; }
 
 /* ===== модалки ===== */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+body.noscroll { overflow: hidden; }
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.78); z-index: 50;
+  display: flex; align-items: flex-end; justify-content: center;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
 .sheet {
   background: var(--bg2); width: 100%; max-width: 560px; border-radius: 24px 24px 0 0;
-  padding: 24px 20px max(24px, env(safe-area-inset-bottom)); max-height: 86vh; overflow-y: auto;
+  padding: 24px 20px max(24px, env(safe-area-inset-bottom)); max-height: 86vh;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  position: relative; z-index: 1; will-change: transform;
   animation: up .22s ease-out;
 }
 @keyframes up { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -198,11 +205,20 @@ code.inline { background: #0d1418; border: 1px solid var(--line); border-radius:
 .fb p { font-size: 14.5px; color: var(--txt); opacity: .9; margin-top: 3px; }
 
 /* теория */
-.theory { font-size: 15.5px; }
-.theory p { margin-bottom: 10px; }
+.theory { font-size: 15.5px; line-height: 1.5; }
+.theory p { margin-bottom: 11px; }
+.theory .th-h { font-size: 17px; font-weight: 900; color: var(--txt); margin: 18px 0 8px; padding-left: 11px; border-left: 4px solid var(--blue); }
+.theory .th-h:first-child { margin-top: 2px; }
+.theory .th-list { margin: 2px 0 12px; padding-left: 8px; list-style: none; }
+.theory ul.th-list > li { position: relative; padding-left: 20px; margin-bottom: 7px; }
+.theory ul.th-list > li::before { content: '▸'; position: absolute; left: 2px; color: var(--blue); font-weight: 900; }
+.theory ol.th-list { counter-reset: thl; }
+.theory ol.th-list > li { position: relative; padding-left: 28px; margin-bottom: 7px; }
+.theory ol.th-list > li::before { counter-increment: thl; content: counter(thl); position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: var(--blue); color: #fff; border-radius: 6px; font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
 .theory table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13.5px; }
-.theory th, .theory td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; }
+.theory th, .theory td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
 .theory th { background: var(--card); }
+.theory .keytip { background: rgba(28,176,246,.1); border: 1px solid rgba(28,176,246,.3); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
 
 /* конец урока */
 .endscr { text-align: center; padding: 70px 24px 40px; }
@@ -291,7 +307,9 @@ textarea.editor:focus { border-color: var(--blue); }
 <script src="data.js"></script>
 <script src="data_c.js"></script>
 <script src="extra.js"></script>
+<script src="theory.js"></script>
 <script src="extra_c.js"></script>
+<script src="theory_c.js"></script>
 <script src="langs.js"></script>
 <script>
 'use strict';
@@ -480,29 +498,43 @@ function hl(code) { // подсветка C++
   t = t.replace(/\u0001(\d+)\u0001/g, (m, i) => hold[+i]);
   return t;
 }
+function renderTable(rows) {
+  return '<table>' + rows.map((r, ri) => {
+    const cells = r.split('|').slice(1, -1).map(c => c.trim());
+    if (cells.every(c => /^:?-+:?$/.test(c))) return ''; // строка-разделитель |---|
+    const tag = ri === 0 ? 'th' : 'td';
+    return '<tr>' + cells.map(c => `<${tag}>${fmt(c)}</${tag}>`).join('') + '</tr>';
+  }).join('') + '</table>';
+}
 function theoryHTML(md) {
   const parts = String(md).split('```');
   let out = '';
   parts.forEach((p, i) => {
-    if (i % 2 === 1) { out += '<pre class="code">' + hl(p.replace(/^\n|\n$/g,'')) + '</pre>'; return; }
-    const lines = p.split('\n'); let tbl = [];
-    const flushT = () => {
-      if (!tbl.length) return;
-      out += '<table>' + tbl.map((r, ri) => {
-        const cells = r.split('|').slice(1, -1).map(c => c.trim()).filter((c,ci,arr) => true);
-        if (cells.every(c => /^-+$/.test(c))) return '';
-        const tag = ri === 0 ? 'th' : 'td';
-        return '<tr>' + cells.map(c => `<${tag}>${fmt(c)}</${tag}>`).join('') + '</tr>';
-      }).join('') + '</table>'; tbl = [];
-    };
-    let para = [];
+    if (i % 2 === 1) {
+      const code = p.replace(/^\n/, '').replace(/^(c\+\+|cpp|cc|c|cmake|makefile|make|bash|sh|sql|asm|json|text|txt)[ \t]*\n/i, '').replace(/\n$/, '');
+      out += '<pre class="code">' + hl(code) + '</pre>'; return;
+    }
+    const lines = p.split('\n');
+    let tbl = [], para = [], list = null;
+    const flushT = () => { if (tbl.length) { out += renderTable(tbl); tbl = []; } };
     const flushP = () => { if (para.length) { out += '<p>' + para.map(fmt).join('<br>') + '</p>'; para = []; } };
+    const flushL = () => { if (list) { out += '<' + list.tag + ' class="th-list">' + list.items.map(it => '<li>' + fmt(it) + '</li>').join('') + '</' + list.tag + '>'; list = null; } };
+    const flushAll = () => { flushT(); flushP(); flushL(); };
     lines.forEach(ln => {
-      if (ln.trim().startsWith('|')) { flushP(); tbl.push(ln.trim()); }
-      else if (ln.trim() === '') { flushT(); flushP(); }
-      else { flushT(); para.push(ln); }
+      const t = ln.trim();
+      if (t === '') { flushAll(); return; }
+      if (t.startsWith('|')) { flushP(); flushL(); tbl.push(t); return; }
+      flushT();
+      const h = t.match(/^(#{1,4})\s+(.*)/);
+      if (h) { flushP(); flushL(); out += '<div class="th-h">' + fmt(h[2]) + '</div>'; return; }
+      const b = t.match(/^[-•*]\s+(.*)/);
+      if (b) { flushP(); if (!list || list.tag !== 'ul') { flushL(); list = { tag: 'ul', items: [] }; } list.items.push(b[1]); return; }
+      const o = t.match(/^\d+[.)]\s+(.*)/);
+      if (o) { flushP(); if (!list || list.tag !== 'ol') { flushL(); list = { tag: 'ol', items: [] }; } list.items.push(o[1]); return; }
+      flushL();
+      para.push(ln);
     });
-    flushT(); flushP();
+    flushAll();
   });
   return '<div class="theory">' + out + '</div>';
 }
@@ -686,39 +718,45 @@ function plural(n, one, few, many) {
   return many;
 }
 
+// единая точка для модалок: блокирует скролл фона, чтобы он не «протекал» поверх листа
+function openSheet(innerHTML) {
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = '<div class="sheet">' + innerHTML + '</div>';
+  document.body.appendChild(ov);
+  document.body.classList.add('noscroll');
+  ov.close = () => {
+    ov.remove();
+    if (!document.querySelector('.overlay')) document.body.classList.remove('noscroll');
+  };
+  ov.addEventListener('click', e => { if (e.target === ov) ov.close(); });
+  ov.querySelector('.sheet').scrollTop = 0;
+  return ov;
+}
 function openLessonSheet(id) {
   const { u, l } = ALL_LESSONS[lessonIndex(id)];
-  const ov = document.createElement('div'); ov.className = 'overlay';
-  ov.innerHTML = `<div class="sheet">
+  const ov = openSheet(`
     <h3>${l.icon} ${esc(l.title)}</h3>
     <div class="sub">День ${u.day} · ${Math.min(LESSON_SIZE, l.ex.length)} вопросов из пула ${l.ex.length} · +10 XP${S.done[id] ? ' · пройден ✓' : ''}</div>
     <button class="btn blue" data-a="theory">📖 Конспект</button>
     <button class="btn" data-a="start">${S.done[id] ? 'Повторить' : 'Начать урок'}</button>
-    <button class="btn ghost" data-a="close">Закрыть</button>
-  </div>`;
-  document.body.appendChild(ov);
+    <button class="btn ghost" data-a="close">Закрыть</button>`);
   ov.addEventListener('click', e => {
-    if (e.target === ov) { ov.remove(); return; }
     const a = e.target.closest('[data-a]'); if (!a) return;
-    if (a.dataset.a === 'close') ov.remove();
-    if (a.dataset.a === 'theory') { ov.remove(); openTheory(id, true); }
-    if (a.dataset.a === 'start') { ov.remove(); startLesson(id); }
+    if (a.dataset.a === 'close') ov.close();
+    if (a.dataset.a === 'theory') { ov.close(); openTheory(id, true); }
+    if (a.dataset.a === 'start') { ov.close(); startLesson(id); }
   });
 }
 function openTheory(id, offerStart) {
   const { l } = ALL_LESSONS[lessonIndex(id)];
-  const ov = document.createElement('div'); ov.className = 'overlay';
-  ov.innerHTML = `<div class="sheet">
+  const ov = openSheet(`
     <h3>📖 ${esc(l.title)}</h3><div class="sub">Конспект перед уроком</div>
     ${theoryHTML(l.th)}
     ${offerStart ? '<button class="btn" data-a="start" style="margin-top:14px">Начать урок</button>' : ''}
-    <button class="btn ghost" data-a="close" style="margin-top:12px">Закрыть</button>
-  </div>`;
-  document.body.appendChild(ov);
+    <button class="btn ghost" data-a="close" style="margin-top:12px">Закрыть</button>`);
   ov.addEventListener('click', e => {
-    if (e.target === ov) { ov.remove(); return; }
     const a = e.target.closest('[data-a]'); if (!a) return;
-    ov.remove();
+    ov.close();
     if (a.dataset.a === 'start') startLesson(id);
   });
 }

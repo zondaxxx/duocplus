@@ -12,6 +12,20 @@
   }));
 })(window.COURSE_C, window.EXTRA_C);
 
+// Расширенные конспекты (theory.js / theory_c.js) перекрывают исходный th урока.
+(function mergeTheory(course, th) {
+  if (!course || !th) return;
+  course.forEach(u => u.lessons.forEach(l => {
+    if (typeof th[l.id] === 'string' && th[l.id].trim()) l.th = th[l.id];
+  }));
+})(window.COURSE, window.THEORY_CPP);
+(function mergeTheoryC(course, th) {
+  if (!course || !th) return;
+  course.forEach(u => u.lessons.forEach(l => {
+    if (typeof th[l.id] === 'string' && th[l.id].trim()) l.th = th[l.id];
+  }));
+})(window.COURSE_C, window.THEORY_C);
+
 // Сборка языков: C++ (из data.js) и C / Основы программирования (из data_c.js).
 window.PLAYGROUND_CPP = `#include <iostream>
 

@@ -190,7 +190,7 @@ async def page_index(_: web.Request) -> web.FileResponse:
     return web.FileResponse(ROOT / 'index.html')
 
 
-_STATIC_JS = {'data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'langs.js'}
+_STATIC_JS = {'data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'theory.js', 'theory_c.js', 'langs.js'}
 
 
 async def page_js(request: web.Request) -> web.FileResponse:
@@ -209,6 +209,8 @@ def build_web_app() -> web.Application:
     app.router.add_get('/data_c.js', page_js)
     app.router.add_get('/extra.js', page_js)
     app.router.add_get('/extra_c.js', page_js)
+    app.router.add_get('/theory.js', page_js)
+    app.router.add_get('/theory_c.js', page_js)
     app.router.add_get('/langs.js', page_js)
     app.router.add_get('/api/health', api_health)
     app.router.add_get('/api/progress', api_get_progress)
