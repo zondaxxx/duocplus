@@ -1168,11 +1168,11 @@ int main() {
 function renderCode() {
   const done = Object.keys(S.codeDone).length;
   let h = `<div class="page">
-    <h1>🧪 Песочница кода</h1>
-    <div class="sub">${TG ? 'Код реально компилируется и запускается (gcc, C++17)' : '📴 запуск доступен в Telegram-приложении'} · решено ${done}/${CODE_CHALLENGES.length}</div>
+    <h1>🧪 Песочница кода · ${esc(ACTIVE.name)}</h1>
+    <div class="sub">${TG ? 'Код реально компилируется и запускается (gcc, ' + ACTIVE.std + ')' : '📴 запуск доступен в Telegram-приложении'} · решено ${done}/${CODE_CHALLENGES.length}</div>
     <button class="codecard" id="play">
       <span class="cic">⚡</span>
-      <span class="ct"><b>Свободная песочница</b><span>Пиши любой C++ и запускай прямо здесь</span></span>
+      <span class="ct"><b>Свободная песочница</b><span>Пиши любой ${esc(ACTIVE.name)} и запускай прямо здесь</span></span>
     </button>
     <div class="run-label" style="margin-top:18px">Челленджи: допиши / исправь код</div>`;
   CODE_CHALLENGES.forEach((c, i) => {
