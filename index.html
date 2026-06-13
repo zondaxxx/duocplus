@@ -398,13 +398,29 @@ function useLang(lang) {
   }));
 }
 function lessonIndex(id) { return ALL_LESSONS.findIndex(x => x.l.id === id); }
+
+/* ---- детерминированный XP: считается из достижений, фарм переигровкой невозможен ----
+   Та же формула продублирована на сервере (server/recompute_xp.py) — клиент и БД совпадают. */
+function examBonus(b) { b = b || 0; return b >= 90 ? 50 : b >= 75 ? 30 : b >= 50 ? 15 : b > 0 ? 5 : 0; }
+function computeXp(b) {
+  if (!b) return 0;
+  let xp = 0;
+  const done = b.done || {}, perfect = b.perfect || {}, code = b.codeDone || {};
+  for (const id in done) if (done[id]) xp += 10 + (perfect[id] ? 5 : 0); // урок: 10, +5 за идеал — один раз
+  for (const id in code) if (code[id]) xp += 15;                          // код-челлендж: 15 — один раз
+  xp += examBonus(b.bestExam);                                           // экзамен: бонус за ЛУЧШИЙ результат
+  return xp;
+}
+function recomputeAll() { for (const k of LANG_IDS) STORE.langs[k].xp = computeXp(STORE.langs[k]); }
 function totalXp() { let t = 0; for (const k of LANG_IDS) t += (STORE.langs[k].xp || 0); return t; }
 function save() {
+  recomputeAll();                              // XP всегда пересчитывается из достижений
   STORE.xp = totalXp();                        // зеркало XP для лидерборда (БД-индекс читает progress->>'xp')
   try { localStorage.setItem(KEY, JSON.stringify(STORE)); } catch (e) {}
   scheduleSync();
 }
 useLang(STORE.lang);
+recomputeAll();                                // исправляем возможный старый нафармленный XP при загрузке
 
 // SM-2-lite: интервалы в днях по числу успешных повторов подряд
 const SRS_STEPS = [1, 2, 4, 8, 16, 30];
@@ -998,22 +1014,24 @@ function finishLesson() {
   const acc = Math.round(L.firstTry / L.ex.length * 100);
   if (L.exam) { finishExam(acc); return; }
   if (L.review) { finishReview(acc); return; }
-  const first = !S.done[L.id];
+  const before = computeXp(S);
+  const replay = !!S.done[L.id];
   S.done[L.id] = true;
   if (perfect) S.perfect[L.id] = true;
-  S.xp += xp;
   bumpStreak();
   save();
+  const gained = computeXp(S) - before;       // 0 при переигровке уже пройденного урока
   const id = L.id; L = null;
   app.innerHTML = `<div class="endscr">
     <div class="big">${perfect ? '🏅' : '🎉'}</div>
     <h2>Урок пройден!</h2>
     <div class="endcards">
-      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +${xp} XP</div></div>
+      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +${gained} XP</div></div>
       <div class="endcard" style="background:var(--green)"><div class="in"><small style="color:var(--green)">Точность</small>🎯 ${acc}%</div></div>
       <div class="endcard" style="background:#ff9600"><div class="in"><small style="color:#ff9600">Стрик</small>🔥 ${S.streak}</div></div>
     </div>
-    ${perfect ? '<p style="color:var(--gold);font-weight:900;margin-bottom:20px">Без единой ошибки! +5 бонусных XP</p>' : ''}
+    ${gained > 0 && perfect ? '<p style="color:var(--gold);font-weight:900;margin-bottom:20px">Без единой ошибки! +5 бонусных XP</p>' : ''}
+    ${replay && gained === 0 ? '<p style="color:var(--mut);font-weight:700;margin-bottom:20px">Повторение пройденного — XP за него уже начислен 🙂</p>' : ''}
     <button class="btn" id="cont">Продолжить</button>
   </div>`;
   if (perfect) SFX.fanfare(); else SFX.complete();
@@ -1056,12 +1074,13 @@ function renderExamIntro() {
 }
 function finishExam(acc) {
   L = null;
+  const before = computeXp(S);
   S.examCount++;
   const best = acc > S.bestExam;
   if (best) S.bestExam = acc;
-  S.xp += acc >= 80 ? 20 : 10;
   bumpStreak();
   save();
+  const gained = computeXp(S) - before;        // XP только если улучшил лучший результат (бонус за рекорд)
   const verdict = acc >= 90 ? 'Блестяще! Ты готов(а) 🏆' : acc >= 75 ? 'Отлично, почти готов(а)!' : acc >= 50 ? 'Неплохо, но повтори слабые темы' : 'Стоит пройтись по урокам ещё раз';
   app.innerHTML = `<div class="endscr">
     <div class="big">${acc >= 75 ? '🏆' : acc >= 50 ? '💪' : '📚'}</div>
@@ -1069,7 +1088,7 @@ function finishExam(acc) {
     <p style="font-weight:900;font-size:19px;margin-bottom:8px">${verdict}</p>
     ${best && S.examCount > 1 ? '<p style="color:var(--gold);font-weight:900">Новый рекорд!</p>' : ''}
     <div class="endcards" style="margin-top:24px">
-      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +${acc >= 80 ? 20 : 10} XP</div></div>
+      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +${gained} XP</div></div>
       <div class="endcard" style="background:var(--blue)"><div class="in"><small style="color:var(--blue)">Рекорд</small>🥇 ${S.bestExam}%</div></div>
     </div>
     <button class="btn" id="again">Ещё раз</button>
@@ -1082,14 +1101,14 @@ function finishExam(acc) {
 }
 function finishReview(acc) {
   const n = L.ex.length; L = null;
-  S.xp += 8; bumpStreak(); save();
+  bumpStreak(); save();
   const left = weakCount();
   app.innerHTML = `<div class="endscr">
     <div class="big">🧠</div>
     <h2>Повторение пройдено!</h2>
     <p style="font-weight:900;font-size:18px;margin-bottom:6px">${n} ${plural(n, 'карточка закреплена', 'карточки закреплены', 'карточек закреплено')}</p>
     <div class="endcards" style="margin-top:20px">
-      <div class="endcard" style="background:var(--gold)"><div class="in"><small style="color:var(--gold)">Опыт</small>⚡ +8 XP</div></div>
+      <div class="endcard" style="background:var(--green)"><div class="in"><small style="color:var(--green)">Точность</small>🎯 ${acc}%</div></div>
       <div class="endcard" style="background:var(--purple)"><div class="in"><small style="color:var(--purple)">Осталось</small>🧠 ${left}</div></div>
     </div>
     <p style="color:var(--mut);font-size:13.5px;margin:16px 24px 24px;font-weight:700">Карточки вернутся на повтор через 1 → 2 → 4 → 8 дней. Чем чаще отвечаешь верно — тем реже видишь.</p>
@@ -1236,8 +1255,7 @@ function openEditor(opts) {
       out.className = 'run-out good';
       const first = !S.codeDone[opts.id];
       S.codeDone[opts.id] = true;
-      if (first) S.xp += 15;
-      bumpStreak(); save();
+      bumpStreak(); save();                      // save() пересчитает XP (+15 только при первом решении)
       out.textContent = (got || '(пусто)') + '\n\n✅ Верно! ' + (first ? '+15 XP' : 'Задача уже была решена.');
       SFX.fanfare(); haptic('success'); confetti(); vib(15);
     } else {
