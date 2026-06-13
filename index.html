@@ -36,6 +36,25 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .topbar span { display: flex; align-items: center; gap: 6px; }
 .stat-fire { color: #ff9600; } .stat-xp { color: var(--gold); } .stat-day { color: var(--blue); }
+.lang-chip { font-weight: 900; font-size: 14px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); padding: 5px 10px; border-radius: 12px; display: flex; align-items: center; gap: 5px; }
+
+/* ===== выбор языка ===== */
+body.picking #nav { display: none; }
+.picker { padding: 32px 18px 40px; }
+.picker-top { text-align: center; margin-bottom: 28px; }
+.picker-logo { font-size: 60px; }
+.picker-top h1 { font-size: 28px; font-weight: 900; margin-top: 6px; }
+.picker-top p { color: var(--mut); font-weight: 700; font-size: 14px; margin-top: 6px; padding: 0 12px; }
+.langcard { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--card); border: 2px solid var(--line); border-bottom-width: 5px; border-radius: 18px; padding: 16px; margin-bottom: 14px; transition: transform .1s; }
+.langcard:active { transform: translateY(2px); }
+.langcard.cur { border-color: var(--accent); }
+.lc-badge { width: 58px; height: 58px; border-radius: 16px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 900; color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.3); }
+.lc-body { flex: 1; min-width: 0; }
+.lc-body b { font-size: 22px; font-weight: 900; display: block; }
+.lc-body span { font-size: 13px; color: var(--mut); font-weight: 700; display: block; margin: 2px 0 6px; }
+.lc-stats { font-size: 12.5px; font-weight: 800; color: var(--txt); opacity: .85; }
+.lc-go { color: var(--accent); font-size: 22px; font-weight: 900; flex: none; }
+.picker-foot { text-align: center; font-size: 13px; font-weight: 800; color: var(--mut); margin-top: 20px; }
 
 /* ===== путь ===== */
 .unit-head {
@@ -261,6 +280,8 @@ textarea.editor:focus { border-color: var(--blue); }
   <button data-tab="me" title="Профиль">👤</button>
 </nav>
 <script src="data.js"></script>
+<script src="data_c.js"></script>
+<script src="langs.js"></script>
 <script>
 'use strict';
 /* ================== Telegram Mini App ================== */
@@ -273,8 +294,8 @@ if (TG) {
 function tgHeaders(extra) {
   return Object.assign(TG ? { 'Authorization': 'tma ' + TG.initData } : {}, extra || {});
 }
-function mergeProgress(a, b) { // объединение локального и серверного прогресса
-  if (!b || typeof b !== 'object') return a;
+function mergeBucket(a, b) { // объединение прогресса одного языка
+  a = a || blankProgress(); b = b || blankProgress();
   const out = JSON.parse(JSON.stringify(a));
   out.xp = Math.max(a.xp || 0, b.xp || 0);
   out.streak = Math.max(a.streak || 0, b.streak || 0);
@@ -287,12 +308,18 @@ function mergeProgress(a, b) { // объединение локального и
   out.perfect = Object.assign({}, b.perfect, a.perfect);
   out.tickets = Object.assign({}, b.tickets, a.tickets);
   out.codeDone = Object.assign({}, b.codeDone, a.codeDone);
-  // SRS: для каждой карточки берём запись с более свежим last
   out.srs = Object.assign({}, b.srs);
   for (const g in (a.srs || {})) {
     const ea = a.srs[g], eb = (b.srs || {})[g];
     out.srs[g] = (!eb || (ea.last || 0) >= (eb.last || 0)) ? ea : eb;
   }
+  return out;
+}
+function mergeProgress(a, b) { // объединяем два STORE (a — локальный, b — серверный)
+  if (!b || typeof b !== 'object') return a;
+  const A = normalizeStore(a), B = normalizeStore(b);
+  const out = { lang: LANG_IDS.indexOf(A.lang) >= 0 ? A.lang : B.lang, soundOff: A.soundOff, chosen: !!(A.chosen || B.chosen), langs: {} };
+  for (const k of LANG_IDS) out.langs[k] = mergeBucket(A.langs[k], B.langs[k]);
   return out;
 }
 let syncTimer = null;
@@ -304,7 +331,7 @@ function scheduleSync() {
 async function pushProgress() {
   if (!TG) return;
   try {
-    const r = await fetch('/api/progress', { method: 'POST', headers: tgHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(S) });
+    const r = await fetch('/api/progress', { method: 'POST', headers: tgHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(STORE) });
     syncState = r.ok ? 'ok' : 'error';
   } catch (e) { syncState = 'error'; }
 }
@@ -314,7 +341,7 @@ async function pullProgress() {
     const r = await fetch('/api/progress', { headers: tgHeaders() });
     if (!r.ok) { syncState = 'error'; return; }
     const j = await r.json();
-    if (j.progress) { S = mergeProgress(S, j.progress); save(); }
+    if (j.progress) { STORE = mergeProgress(STORE, j.progress); useLang(STORE.lang); save(); }
     syncState = 'ok';
     render();
   } catch (e) { syncState = 'error'; }
@@ -322,31 +349,62 @@ async function pullProgress() {
 // отправка прогресса при сворачивании мини-аппа
 window.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && TG) {
-    try { navigator.sendBeacon('/api/progress', new Blob([JSON.stringify({ initData: TG.initData, progress: S })], { type: 'application/json' })); } catch (e) {}
+    try { navigator.sendBeacon('/api/progress', new Blob([JSON.stringify({ initData: TG.initData, progress: STORE })], { type: 'application/json' })); } catch (e) {}
   }
 });
 
-/* ================== состояние ================== */
+/* ================== состояние (мультиязычное: C / C++) ================== */
 const KEY = 'cppduo_v1';
-let S = load();
-function load() {
-  const base = { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {}, soundOff: false };
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return Object.assign(base, s, { srs: s.srs || {}, codeDone: s.codeDone || {} }); } catch(e) {}
-  return base;
+const LANG_IDS = Object.keys(LANGS);           // ['cpp','c']
+function blankProgress() {
+  return { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {} };
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} scheduleSync(); }
-
-const ALL_LESSONS = [];
-COURSE.forEach(u => u.lessons.forEach(l => ALL_LESSONS.push({ u, l })));
+function fillBucket(p) { return Object.assign(blankProgress(), p || {}); }
+function normalizeStore(raw) {
+  // новый формат: { lang, soundOff, chosen, langs:{ cpp, c } }
+  if (raw && raw.langs && (raw.langs.cpp || raw.langs.c)) {
+    const langs = {};
+    for (const k of LANG_IDS) langs[k] = fillBucket(raw.langs[k]);
+    return { lang: LANG_IDS.indexOf(raw.lang) >= 0 ? raw.lang : 'cpp', soundOff: !!raw.soundOff, chosen: !!raw.chosen, langs };
+  }
+  // старый плоский формат (только C++) → переносим в langs.cpp, прогресс не теряется
+  if (raw && raw.done) {
+    const langs = {}; for (const k of LANG_IDS) langs[k] = blankProgress();
+    langs.cpp = fillBucket(raw);
+    return { lang: 'cpp', soundOff: !!raw.soundOff, chosen: true, langs };
+  }
+  const langs = {}; for (const k of LANG_IDS) langs[k] = blankProgress();
+  return { lang: 'cpp', soundOff: false, chosen: false, langs };
+}
+function load() {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+  return normalizeStore(raw);
+}
+let STORE = load();
+let S, ACTIVE, ALL_LESSONS, EX_BY_ID, TICKETS, CODE_CHALLENGES;
+function useLang(lang) {
+  if (LANG_IDS.indexOf(lang) < 0) lang = 'cpp';
+  STORE.lang = lang;
+  S = STORE.langs[lang];
+  ACTIVE = LANGS[lang];
+  TICKETS = ACTIVE.tickets;
+  CODE_CHALLENGES = ACTIVE.challenges;
+  ALL_LESSONS = [];
+  EX_BY_ID = {};
+  ACTIVE.course.forEach(u => u.lessons.forEach(l => {
+    ALL_LESSONS.push({ u, l });
+    l.ex.forEach((e, i) => { e._gid = lang + ':' + l.id + '#' + i; e._lesson = l.title; EX_BY_ID[e._gid] = e; });
+  }));
+}
 function lessonIndex(id) { return ALL_LESSONS.findIndex(x => x.l.id === id); }
-
-/* ---- стабильные ID упражнений + индекс для интервальных повторений ---- */
-const EX_BY_ID = {};
-COURSE.forEach(u => u.lessons.forEach(l => l.ex.forEach((e, i) => {
-  e._gid = l.id + '#' + i;
-  e._lesson = l.title;
-  EX_BY_ID[e._gid] = e;
-})));
+function totalXp() { let t = 0; for (const k of LANG_IDS) t += (STORE.langs[k].xp || 0); return t; }
+function save() {
+  STORE.xp = totalXp();                        // зеркало XP для лидерборда (БД-индекс читает progress->>'xp')
+  try { localStorage.setItem(KEY, JSON.stringify(STORE)); } catch (e) {}
+  scheduleSync();
+}
+useLang(STORE.lang);
 
 // SM-2-lite: интервалы в днях по числу успешных повторов подряд
 const SRS_STEPS = [1, 2, 4, 8, 16, 30];
@@ -425,7 +483,7 @@ function vib(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
 /* ================== звук (Web Audio, без файлов) ================== */
 let _ac = null;
 function ac() {
-  if (S.soundOff) return null;
+  if (STORE.soundOff) return null;
   if (!_ac) { try { _ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
   if (_ac.state === 'suspended') { try { _ac.resume(); } catch (e) {} }
   return _ac;
@@ -474,7 +532,7 @@ function bumpStreak() {
 }
 
 /* ================== навигация ================== */
-let TAB = 'home';
+let TAB = 'picker';
 document.getElementById('nav').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   TAB = b.dataset.tab; render();
@@ -484,8 +542,10 @@ function setNav() {
 }
 function render() {
   document.body.classList.remove('inlesson');
+  document.body.classList.toggle('picking', TAB === 'picker');
   setNav();
-  if (TAB === 'home') renderHome();
+  if (TAB === 'picker') renderPicker();
+  else if (TAB === 'home') renderHome();
   else if (TAB === 'code') renderCode();
   else if (TAB === 'tickets') renderTickets();
   else if (TAB === 'exam') renderExamIntro();
@@ -493,11 +553,52 @@ function render() {
   window.scrollTo(0, 0);
 }
 
+/* ================== выбор языка ================== */
+function langProgress(id) {
+  const p = STORE.langs[id], course = LANGS[id].course;
+  let lessons = 0, done = 0;
+  course.forEach(u => u.lessons.forEach(l => { lessons++; if (p.done[l.id]) done++; }));
+  return { xp: p.xp || 0, streak: p.streak || 0, done, lessons };
+}
+function chooseLang(id) {
+  useLang(id);
+  STORE.chosen = true;
+  save();
+  SFX.select(); haptic('light');
+  TAB = 'home';
+  render();
+}
+function renderPicker() {
+  const cards = LANG_IDS.map(id => {
+    const L = LANGS[id], pr = langProgress(id), cur = STORE.lang === id;
+    return `<button class="langcard ${cur ? 'cur' : ''}" data-lang="${id}" style="--accent:${L.accent}">
+      <div class="lc-badge" style="background:${L.accent}">${L.badge}</div>
+      <div class="lc-body">
+        <b>${esc(L.name)}</b>
+        <span>${esc(L.blurb)}</span>
+        <div class="lc-stats">⚡ ${pr.xp} XP · 📚 ${pr.done}/${pr.lessons}${pr.streak ? ' · 🔥 ' + pr.streak : ''}</div>
+      </div>
+      <div class="lc-go">▶</div>
+    </button>`;
+  }).join('');
+  app.innerHTML = `<div class="picker">
+    <div class="picker-top">
+      <div class="picker-logo">🦉</div>
+      <h1>C / C++ Hero</h1>
+      <p>Выбери язык, который учишь — прогресс по каждому хранится отдельно</p>
+    </div>
+    ${cards}
+    <p class="picker-foot">made by <a href="https://t.me/nyanzondaxxx" style="color:var(--blue);text-decoration:none">@nyanzondaxxx</a></p>
+  </div>`;
+  app.querySelectorAll('.langcard').forEach(b => b.onclick = () => chooseLang(b.dataset.lang));
+}
+
 /* ================== главная: путь ================== */
 function renderHome() {
   let h = `<div class="topbar">
+    <button class="lang-chip" id="langchip" style="--accent:${ACTIVE.accent}">${esc(ACTIVE.name)} ▾</button>
     <span class="stat-fire">🔥 ${S.streak}</span>
-    <span class="stat-xp">⚡ ${S.xp} XP</span>
+    <span class="stat-xp">⚡ ${S.xp}</span>
     <span class="stat-day">📚 ${doneCount()}/${ALL_LESSONS.length}</span>
   </div>`;
   const weak = weakCount();
@@ -509,7 +610,7 @@ function renderHome() {
     </button>`;
   }
   const offsets = [0, -70, -40, 40, 70];
-  COURSE.forEach(u => {
+  ACTIVE.course.forEach(u => {
     const total = u.lessons.length, done = u.lessons.filter(l => S.done[l.id]).length;
     h += `<div class="unit-head" style="background:${u.color}">
       <div class="day-tag">День ${u.day} · ${done}/${total}</div>
@@ -536,6 +637,8 @@ function renderHome() {
     <p style="text-align:center;font-size:13px;padding:0 30px 30px;font-weight:800">
     made by <a href="https://t.me/nyanzondaxxx" style="color:var(--blue);text-decoration:none">@nyanzondaxxx</a></p>`;
   app.innerHTML = h;
+  const lc = document.getElementById('langchip');
+  if (lc) lc.onclick = () => { TAB = 'picker'; render(); };
   const sc = document.getElementById('srscard');
   if (sc) sc.onclick = startReview;
   app.querySelectorAll('.node').forEach(n => n.addEventListener('click', () => {
@@ -946,9 +1049,9 @@ function renderExamIntro() {
   </div>`;
   document.getElementById('go').onclick = () => {
     const pool = [];
-    COURSE.forEach(u => u.lessons.forEach(l => l.ex.forEach(e => pool.push(e))));
+    ACTIVE.course.forEach(u => u.lessons.forEach(l => l.ex.forEach(e => pool.push(e))));
     const pick = shuffle(pool).slice(0, 20);
-    startLesson({ ex: pick }, true);
+    startLesson({ ex: pick }, 'exam');
   };
 }
 function finishExam(acc) {
@@ -1024,28 +1127,33 @@ function renderProfile() {
   app.innerHTML = `<div class="page">
     <h1>👤 ${tgUser ? esc(tgUser.first_name || 'Твой прогресс') : 'Твой прогресс'}</h1>
     <div class="sub">${tgUser && tgUser.username ? '@' + esc(tgUser.username) + ' · ' : ''}${syncBadge}</div>
+    <button class="btn ghost" id="switchlang" style="margin-bottom:16px">${ACTIVE.badge} Сейчас: ${esc(ACTIVE.name)} · сменить язык</button>
     <div class="statgrid">
-      <div class="statcard"><div class="v">⚡ ${S.xp}</div><div class="l">Всего XP</div></div>
+      <div class="statcard"><div class="v">⚡ ${S.xp}</div><div class="l">XP (${esc(ACTIVE.name)})</div></div>
       <div class="statcard"><div class="v">🔥 ${S.streak}</div><div class="l">Дней подряд</div></div>
       <div class="statcard"><div class="v">📚 ${doneCount()}/${ALL_LESSONS.length}</div><div class="l">Уроков пройдено</div></div>
       <div class="statcard"><div class="v">🏅 ${perfect}</div><div class="l">Идеальных уроков</div></div>
       <div class="statcard"><div class="v">🎓 ${S.bestExam}%</div><div class="l">Лучший экзамен</div></div>
-      <div class="statcard"><div class="v">📋 ${Object.values(S.tickets).filter(Boolean).length}/45</div><div class="l">Билетов разобрано</div></div>
-      <div class="statcard"><div class="v">🧪 ${Object.keys(S.codeDone).length}/${typeof CODE_CHALLENGES !== 'undefined' ? CODE_CHALLENGES.length : 0}</div><div class="l">Код-челленджей</div></div>
+      <div class="statcard"><div class="v">📋 ${Object.values(S.tickets).filter(Boolean).length}/${TICKETS.length}</div><div class="l">Билетов разобрано</div></div>
+      <div class="statcard"><div class="v">🧪 ${Object.keys(S.codeDone).length}/${CODE_CHALLENGES.length}</div><div class="l">Код-челленджей</div></div>
       <div class="statcard"><div class="v">🧠 ${weakCount()}</div><div class="l">Карточек на повторе</div></div>
     </div>
-    <button class="btn ${S.soundOff ? 'ghost' : ''}" id="sound">${S.soundOff ? '🔇 Звук выключен' : '🔊 Звук включён'}</button>
+    <button class="btn ${STORE.soundOff ? 'ghost' : ''}" id="sound">${STORE.soundOff ? '🔇 Звук выключен' : '🔊 Звук включён'}</button>
     <button class="btn blue" id="unlock" style="margin-top:12px">${S.unlockAll ? '🔒 Вернуть последовательное прохождение' : '🔓 Разблокировать все уроки'}</button>
-    <button class="btn red" id="reset" style="margin-top:12px">Сбросить прогресс</button>
+    <button class="btn red" id="reset" style="margin-top:12px">Сбросить прогресс (${esc(ACTIVE.name)})</button>
     <p style="color:var(--mut);font-size:13px;margin-top:18px;font-weight:700">
-      План: 1 день = 1 юнит. Раздел «Экзамен» — пробник из 20 случайных вопросов. Уроки «📝 Экзамен: задачи» в дне 7 — разбор реальных типовых задач с листочка.</p>
+      Прогресс по C и C++ хранится отдельно, синхронизируется по Telegram и общий на всех устройствах.</p>
     <p style="text-align:center;font-size:14px;margin-top:22px;font-weight:800">
       made by <a href="https://t.me/nyanzondaxxx" style="color:var(--blue);text-decoration:none">@nyanzondaxxx</a></p>
   </div>`;
-  document.getElementById('sound').onclick = () => { S.soundOff = !S.soundOff; save(); if (!S.soundOff) SFX.correct(); renderProfile(); };
+  document.getElementById('switchlang').onclick = () => { TAB = 'picker'; render(); };
+  document.getElementById('sound').onclick = () => { STORE.soundOff = !STORE.soundOff; save(); if (!STORE.soundOff) SFX.correct(); renderProfile(); };
   document.getElementById('unlock').onclick = () => { S.unlockAll = !S.unlockAll; save(); renderProfile(); };
   document.getElementById('reset').onclick = () => {
-    if (confirm('Точно сбросить весь прогресс?')) { localStorage.removeItem(KEY); S = load(); render(); }
+    if (confirm('Сбросить прогресс по языку ' + ACTIVE.name + '? Прогресс другого языка останется.')) {
+      STORE.langs[STORE.lang] = blankProgress();
+      useLang(STORE.lang); save(); render();
+    }
   };
 }
 
@@ -1081,7 +1189,7 @@ function renderCode() {
   app.querySelectorAll('[data-c]').forEach(b => b.onclick = () => openCodeChallenge(+b.dataset.c));
 }
 function openPlayground() {
-  openEditor({ title: '⚡ Песочница', q: 'Пиши любой C++ код и жми «Запустить».', starter: PLAYGROUND_STARTER });
+  openEditor({ title: '⚡ Песочница', q: 'Пиши любой ' + ACTIVE.name + ' код и жми «Запустить».', starter: ACTIVE.playground || PLAYGROUND_STARTER });
 }
 function openCodeChallenge(i) {
   const c = CODE_CHALLENGES[i];
@@ -1146,7 +1254,7 @@ async function execCode(code, outEl, btn) {
   outEl.innerHTML = '<span class="spin">⏳</span> Компиляция и запуск…';
   btn.disabled = true;
   try {
-    const r = await fetch('/api/run', { method: 'POST', headers: tgHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ code }) });
+    const r = await fetch('/api/run', { method: 'POST', headers: tgHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ code, lang: ACTIVE.runLang }) });
     if (r.status === 429) { outEl.className = 'run-out err'; outEl.textContent = '⏳ Слишком часто — подожди пару секунд.'; return null; }
     const j = await r.json();
     if (!j.ok) { outEl.className = 'run-out err'; outEl.textContent = '⚠️ ' + (j.error || 'не удалось запустить'); return null; }

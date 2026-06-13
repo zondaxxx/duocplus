@@ -32,36 +32,51 @@ bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
 dp = Dispatcher()
 
 _http: aiohttp.ClientSession | None = None
-_compiler = 'gcc-head'  # подберём свежий gcc на старте
+_compiler_cpp = 'gcc-head'      # свежий gcc для C++
+_compiler_c = 'gcc-head-c'      # свежий gcc для C — подберём на старте
 
 # ---------------- запуск кода через Wandbox ----------------
 
-async def _pick_compiler() -> None:
-    global _compiler
+async def _pick_compilers() -> None:
+    global _compiler_cpp, _compiler_c
     try:
         async with _http.get('https://wandbox.org/api/list.json',
                              timeout=aiohttp.ClientTimeout(total=15)) as r:
             data = json.loads(await r.text())  # Wandbox отдаёт нестандартный mimetype
-        best, best_ver = None, ()
-        for c in data:
-            name = c.get('name', '')
-            if c.get('language') == 'C++' and name.startswith('gcc-') and name != 'gcc-head':
-                ver = tuple(int(x) for x in re.findall(r'\d+', name))
-                if ver > best_ver:
-                    best, best_ver = name, ver
-        if best:
-            _compiler = best
+
+        def newest(language: str):
+            best, best_ver = None, ()
+            for c in data:
+                name = c.get('name', '')
+                if c.get('language') == language and name.startswith('gcc-') and 'head' not in name:
+                    ver = tuple(int(x) for x in re.findall(r'\d+', name))
+                    if ver > best_ver:
+                        best, best_ver = name, ver
+            return best
+
+        cpp, cc = newest('C++'), newest('C')
+        if cpp:
+            _compiler_cpp = cpp
+        if cc:
+            _compiler_c = cc
     except Exception as e:
-        log.warning('compiler list failed, using %s: %s', _compiler, e)
-    log.info('c++ compiler: %s', _compiler)
+        log.warning('compiler list failed: %s', e)
+    log.info('compilers: cpp=%s c=%s', _compiler_cpp, _compiler_c)
 
 
-async def _wandbox(code: str) -> dict:
+def _compiler_for(lang: str) -> tuple[str, str]:
+    if lang == 'c':
+        return _compiler_c, '-std=c11'
+    return _compiler_cpp, '-std=c++17'
+
+
+async def _wandbox(code: str, lang: str) -> dict:
+    compiler, std = _compiler_for(lang)
     payload = {
         'code': code,
-        'compiler': _compiler,
+        'compiler': compiler,
         'options': '',
-        'compiler-option-raw': '-std=c++17',
+        'compiler-option-raw': std,
         'stdin': '',
         'save': False,
     }
@@ -131,18 +146,20 @@ async def api_run(request: web.Request) -> web.Response:
     if len(code) > MAX_CODE:
         return web.json_response({'ok': False, 'error': 'код слишком большой'}, status=400)
 
+    lang = 'c' if body.get('lang') == 'c' else 'cpp'
     user = _auth_from_request(request, body)
     ident = str(user['id']) if user else 'ip:' + _client_ip(request)
     if not await storage.rate_ok(f'run:{ident}', 3):
         return web.json_response({'ok': False, 'error': 'слишком часто, подожди пару секунд'}, status=429)
 
-    cache_key = 'runcache:' + hashlib.sha256((_compiler + '|' + code).encode()).hexdigest()
+    compiler, _ = _compiler_for(lang)
+    cache_key = 'runcache:' + hashlib.sha256((compiler + '|' + code).encode()).hexdigest()
     cached = await storage.kv_get(cache_key)
     if cached:
         return web.json_response(json.loads(cached))
 
     try:
-        data = await _wandbox(code)
+        data = await _wandbox(code, lang)
     except Exception as e:
         log.warning('wandbox error: %s', e)
         return web.json_response({'ok': False, 'error': 'компилятор недоступен, попробуй ещё раз'}, status=502)
@@ -162,8 +179,14 @@ async def page_index(_: web.Request) -> web.FileResponse:
     return web.FileResponse(ROOT / 'index.html')
 
 
-async def page_data(_: web.Request) -> web.FileResponse:
-    return web.FileResponse(ROOT / 'data.js')
+_STATIC_JS = {'data.js', 'data_c.js', 'langs.js'}
+
+
+async def page_js(request: web.Request) -> web.FileResponse:
+    name = request.path.lstrip('/')
+    if name not in _STATIC_JS:
+        raise web.HTTPNotFound()
+    return web.FileResponse(ROOT / name)
 
 
 def build_web_app() -> web.Application:
@@ -171,7 +194,9 @@ def build_web_app() -> web.Application:
     # отдаём только явные маршруты — server/ и .env наружу не торчат
     app.router.add_get('/', page_index)
     app.router.add_get('/index.html', page_index)
-    app.router.add_get('/data.js', page_data)
+    app.router.add_get('/data.js', page_js)
+    app.router.add_get('/data_c.js', page_js)
+    app.router.add_get('/langs.js', page_js)
     app.router.add_get('/api/health', api_health)
     app.router.add_get('/api/progress', api_get_progress)
     app.router.add_post('/api/progress', api_save_progress)
@@ -200,21 +225,45 @@ async def cmd_start(message: types.Message) -> None:
     )
 
 
+def _progress_summary(progress: dict) -> dict:
+    """Суммирует прогресс по обоим языкам (новый вложенный формат) либо по старому плоскому."""
+    langs = progress.get('langs') if isinstance(progress.get('langs'), dict) else None
+    if langs:
+        buckets = list(langs.values())
+        return {
+            'xp': sum(int(b.get('xp', 0) or 0) for b in buckets),
+            'streak': max([int(b.get('streak', 0) or 0) for b in buckets] + [0]),
+            'done': sum(len(b.get('done') or {}) for b in buckets),
+            'code': sum(len(b.get('codeDone') or {}) for b in buckets),
+            'best': max([int(b.get('bestExam', 0) or 0) for b in buckets] + [0]),
+            'per': {k: int((langs[k] or {}).get('xp', 0) or 0) for k in langs},
+        }
+    return {
+        'xp': int(progress.get('xp', 0) or 0),
+        'streak': int(progress.get('streak', 0) or 0),
+        'done': len(progress.get('done') or {}),
+        'code': len(progress.get('codeDone') or {}),
+        'best': int(progress.get('bestExam', 0) or 0),
+        'per': {'cpp': int(progress.get('xp', 0) or 0)},
+    }
+
+
 @dp.message(Command('stats'))
 async def cmd_stats(message: types.Message) -> None:
     progress = await storage.load(message.from_user.id)
     if not progress:
         await message.answer('Ты ещё не начинал 🙃 Жми кнопку и вперёд!', reply_markup=_app_button())
         return
-    done = len(progress.get('done') or {})
-    code = len(progress.get('codeDone') or {})
+    s = _progress_summary(progress)
+    per = s['per']
+    per_line = ' · '.join(f'{"C++" if k == "cpp" else "C"}: {v}' for k, v in per.items())
     await message.answer(
         f'📊 <b>Твой прогресс</b>\n\n'
-        f'⚡ XP: <b>{progress.get("xp", 0)}</b>\n'
-        f'🔥 Стрик: <b>{progress.get("streak", 0)}</b> дн.\n'
-        f'📚 Уроков пройдено: <b>{done}/40</b>\n'
-        f'🧪 Код-челленджей: <b>{code}/6</b>\n'
-        f'🎓 Лучший пробный экзамен: <b>{progress.get("bestExam", 0)}%</b>',
+        f'⚡ XP всего: <b>{s["xp"]}</b>  ({per_line})\n'
+        f'🔥 Стрик: <b>{s["streak"]}</b> дн.\n'
+        f'📚 Уроков пройдено: <b>{s["done"]}</b>\n'
+        f'🧪 Код-челленджей: <b>{s["code"]}</b>\n'
+        f'🎓 Лучший пробный экзамен: <b>{s["best"]}%</b>',
         reply_markup=_app_button(),
     )
 
@@ -238,7 +287,7 @@ async def _on_startup(app: web.Application) -> None:
     global _http
     await storage.init()
     _http = aiohttp.ClientSession()
-    await _pick_compiler()
+    await _pick_compilers()
     try:
         await bot.set_webhook(
             f'{APP_URL}{WEBHOOK_PATH}',
