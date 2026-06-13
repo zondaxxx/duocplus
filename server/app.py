@@ -16,6 +16,7 @@ from aiohttp import web
 
 from . import storage
 from .auth import validate_init_data
+from .recompute_xp import recompute as recompute_progress
 
 log = logging.getLogger(__name__)
 
@@ -131,6 +132,8 @@ async def api_save_progress(request: web.Request) -> web.Response:
     if not isinstance(progress, dict):
         return web.json_response({'ok': False, 'error': 'bad progress'}, status=400)
     progress.pop('initData', None)
+    # анти-чит: XP всегда пересчитывается из достижений на сервере — клиент не может его накрутить
+    progress, _, _ = recompute_progress(progress)
     await storage.save(user, progress)
     return web.json_response({'ok': True})
 
