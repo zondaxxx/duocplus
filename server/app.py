@@ -29,6 +29,10 @@ MAX_CODE = 20_000
 WEBHOOK_SECRET = hashlib.sha256(('whsec:' + BOT_TOKEN).encode()).hexdigest()[:40]
 WEBHOOK_PATH = '/tg/webhook'
 
+# Персональная пасхалка (id и текст задаются в .env, чтобы не попадать в публичный репозиторий)
+EGG_UID = os.environ.get('EASTER_USER_ID', '').strip()
+EGG_MSG = os.environ.get('EASTER_MSG', 'Илья-сан, не накручивай 😏').strip()
+
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
 dp = Dispatcher()
 
@@ -115,7 +119,11 @@ async def api_get_progress(request: web.Request) -> web.Response:
     if not user:
         return web.json_response({'ok': False, 'error': 'unauthorized'}, status=401)
     progress = await storage.load(int(user['id']))
-    return web.json_response({'ok': True, 'progress': progress})
+    resp = {'ok': True, 'progress': progress}
+    # пасхалка для конкретного пользователя (id и текст — в .env, не в публичном репозитории)
+    if EGG_UID and str(user['id']) == EGG_UID:
+        resp['egg'] = EGG_MSG
+    return web.json_response(resp)
 
 
 async def api_save_progress(request: web.Request) -> web.Response:

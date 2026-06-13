@@ -230,6 +230,15 @@ code.inline { background: #0d1418; border: 1px solid var(--line); border-radius:
 .statcard .v { font-size: 26px; font-weight: 900; }
 .statcard .l { font-size: 13px; color: var(--mut); font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
 
+/* персональная пасхалка */
+.egg-banner {
+  margin: 14px 12px 0; border-radius: var(--r); padding: 14px 18px;
+  background: linear-gradient(120deg, #ff4b4b, #ff9600); color: #fff;
+  font-weight: 900; font-size: 16px; text-align: center;
+  box-shadow: 0 4px 0 rgba(0,0,0,.3); animation: eggwobble 2.4s ease-in-out infinite;
+}
+@keyframes eggwobble { 0%,100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg); } }
+
 /* карточка повторения на главной */
 .srs-card { margin: 14px 12px 0; border-radius: var(--r); padding: 16px 18px; background: linear-gradient(120deg,#7e3ff2,#b14bff); color:#fff; box-shadow: 0 4px 0 rgba(0,0,0,.3); display:flex; align-items:center; gap:14px; }
 .srs-card .ic { font-size: 34px; }
@@ -285,6 +294,7 @@ textarea.editor:focus { border-color: var(--blue); }
 <script>
 'use strict';
 /* ================== Telegram Mini App ================== */
+let EGG = null;                        // персональная пасхалка (приходит с сервера)
 const TG = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) ? window.Telegram.WebApp : null;
 let syncState = TG ? 'connecting' : 'off'; // off | connecting | ok | error
 if (TG) {
@@ -342,6 +352,7 @@ async function pullProgress() {
     if (!r.ok) { syncState = 'error'; return; }
     const j = await r.json();
     if (j.progress) { STORE = mergeProgress(STORE, j.progress); useLang(STORE.lang); save(); }
+    if (j.egg) EGG = j.egg;            // персональная пасхалка с сервера
     syncState = 'ok';
     render();
   } catch (e) { syncState = 'error'; }
@@ -617,6 +628,9 @@ function renderHome() {
     <span class="stat-xp">⚡ ${S.xp}</span>
     <span class="stat-day">📚 ${doneCount()}/${ALL_LESSONS.length}</span>
   </div>`;
+  if (EGG) {
+    h += `<div class="egg-banner">🥚 ${esc(EGG)}</div>`;
+  }
   const weak = weakCount();
   if (weak > 0) {
     h += `<button class="srs-card" id="srscard">
