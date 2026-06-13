@@ -1,3 +1,17 @@
+// Доп-задания (extra.js / extra_c.js) подмешиваются в пул соответствующих уроков.
+(function mergeExtra(course, extra) {
+  if (!course || !extra) return;
+  course.forEach(u => u.lessons.forEach(l => {
+    if (Array.isArray(extra[l.id]) && extra[l.id].length) l.ex = l.ex.concat(extra[l.id]);
+  }));
+})(window.COURSE, window.EXTRA_CPP);
+(function mergeExtraC(course, extra) {
+  if (!course || !extra) return;
+  course.forEach(u => u.lessons.forEach(l => {
+    if (Array.isArray(extra[l.id]) && extra[l.id].length) l.ex = l.ex.concat(extra[l.id]);
+  }));
+})(window.COURSE_C, window.EXTRA_C);
+
 // Сборка языков: C++ (из data.js) и C / Основы программирования (из data_c.js).
 window.PLAYGROUND_CPP = `#include <iostream>
 

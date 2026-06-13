@@ -290,6 +290,8 @@ textarea.editor:focus { border-color: var(--blue); }
 </nav>
 <script src="data.js"></script>
 <script src="data_c.js"></script>
+<script src="extra.js"></script>
+<script src="extra_c.js"></script>
 <script src="langs.js"></script>
 <script>
 'use strict';
@@ -689,7 +691,7 @@ function openLessonSheet(id) {
   const ov = document.createElement('div'); ov.className = 'overlay';
   ov.innerHTML = `<div class="sheet">
     <h3>${l.icon} ${esc(l.title)}</h3>
-    <div class="sub">День ${u.day} · ${l.ex.length} заданий · +10 XP${S.done[id] ? ' · пройден ✓' : ''}</div>
+    <div class="sub">День ${u.day} · ${Math.min(LESSON_SIZE, l.ex.length)} вопросов из пула ${l.ex.length} · +10 XP${S.done[id] ? ' · пройден ✓' : ''}</div>
     <button class="btn blue" data-a="theory">📖 Конспект</button>
     <button class="btn" data-a="start">${S.done[id] ? 'Повторить' : 'Начать урок'}</button>
     <button class="btn ghost" data-a="close">Закрыть</button>
@@ -723,16 +725,19 @@ function openTheory(id, offerStart) {
 
 /* ================== движок урока ================== */
 let L = null; // текущая сессия
+const LESSON_SIZE = 12; // сколько вопросов в одном прохождении урока (берутся случайно из пула темы)
 // mode: undefined='урок' | 'exam'='пробный экзамен' | 'review'='повторение слабого'
 function startLesson(idOrObj, mode) {
   const isObj = typeof idOrObj === 'object';
   const l = isObj ? idOrObj : ALL_LESSONS[lessonIndex(idOrObj)].l;
   const exam = mode === 'exam', review = mode === 'review';
+  // обычный урок: случайные LESSON_SIZE вопросов из пула темы (пул может быть большим — урок остаётся коротким и разным)
+  const exList = isObj ? l.ex.slice() : shuffle(l.ex).slice(0, LESSON_SIZE);
   L = {
     id: isObj ? '__' + (mode || 'session') + '__' : l.id,
     exam, review,
-    queue: l.ex.map((e, i) => i),
-    ex: l.ex,
+    queue: exList.map((e, i) => i),
+    ex: exList,
     pos: 0, hearts: (exam || review) ? Infinity : 4,
     solved: new Set(), seenWrong: new Set(), firstTry: 0, mistakes: 0, answered: 0,
   };
