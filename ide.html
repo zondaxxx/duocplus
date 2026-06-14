@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C++ Trainer — пошаговый редактор</title>
+<style>
+:root{
+  --bg:#1e1e1e; --bg2:#252526; --bg3:#2d2d2d; --side:#252526; --activity:#333333;
+  --panel:#1e1e1e; --line:#3c3c3c; --txt:#d4d4d4; --mut:#858585; --accent:#0e7acc; --accent2:#1f9cf0;
+  --green:#4ec9b0; --red:#f14c4c; --yellow:#dcdcaa; --kw:#569cd6; --ty:#4ec9b0; --str:#ce9178;
+  --com:#6a9955; --num:#b5cea8; --pre:#c586c0; --fn:#dcdcaa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:13px;overflow:hidden}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+.app{display:flex;flex-direction:column;height:100vh}
+
+/* титульная полоса */
+.titlebar{height:36px;background:var(--bg3);display:flex;align-items:center;justify-content:center;position:relative;border-bottom:1px solid var(--line);flex:none;font-size:12px;color:var(--mut)}
+.titlebar .dots{position:absolute;left:12px;display:flex;gap:8px}
+.titlebar .dots i{width:12px;height:12px;border-radius:50%;display:block}
+.dots i:nth-child(1){background:#ff5f56}.dots i:nth-child(2){background:#ffbd2e}.dots i:nth-child(3){background:#27c93f}
+.titlebar .menu{position:absolute;left:80px;display:flex;gap:16px;font-size:12px;color:var(--mut)}
+@media(max-width:760px){.titlebar .menu{display:none}}
+
+.main{flex:1;display:flex;min-height:0}
+
+/* activity bar */
+.activity{width:48px;background:var(--activity);display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:4px;flex:none}
+.activity button{width:48px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:.55;border-left:2px solid transparent}
+.activity button.on{opacity:1;border-left-color:#fff}
+@media(max-width:760px){.activity{display:none}}
+
+/* sidebar / explorer */
+.side{width:230px;background:var(--side);border-right:1px solid var(--line);flex:none;overflow-y:auto;display:flex;flex-direction:column}
+.side h2{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);padding:12px 16px 6px;font-weight:600}
+.file{display:flex;align-items:center;gap:8px;padding:5px 16px;cursor:pointer;font-size:13px;color:#cccccc}
+.file:hover{background:#2a2d2e}
+.file.on{background:#37373d}
+.file .ic{color:var(--accent2)}
+.file .chk{margin-left:auto;color:var(--green);font-weight:700}
+.file .lock{margin-left:auto;color:var(--mut);font-size:11px}
+.file.locked{opacity:.5;cursor:not-allowed}
+@media(max-width:980px){.side{width:180px}}
+@media(max-width:760px){.side{display:none}}
+
+/* editor column */
+.editorcol{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.tabs{height:36px;background:var(--bg2);display:flex;align-items:stretch;border-bottom:1px solid var(--line);flex:none}
+.tab{display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--bg);border-right:1px solid var(--line);font-size:13px;color:#fff}
+.tab .ic{color:var(--accent2)}
+.tab .dot{width:8px;height:8px;border-radius:50%;background:#fff;margin-left:4px;opacity:.0}
+.tab.dirty .dot{opacity:.8}
+
+.editwrap{flex:1;display:flex;min-height:0;position:relative;overflow:hidden;background:var(--bg)}
+.gutter{flex:none;overflow:hidden;background:var(--bg);min-width:50px}
+.gutter .gi{padding:10px 0;font:13px/20px "SF Mono",Menlo,Consolas,monospace;color:#6e7681;user-select:none}
+.gutter .gi div{height:20px;padding:0 14px 0 12px;text-align:right}
+.codearea{position:relative;flex:1;min-width:0;overflow:hidden}
+.codearea pre,.codearea textarea{
+  position:absolute;inset:0;margin:0;padding:10px 14px;
+  font:13px/20px "SF Mono",Menlo,Consolas,monospace;
+  white-space:pre;tab-size:4;border:0;overflow:auto;
+}
+.codearea pre{pointer-events:none;color:var(--txt)}
+.codearea textarea{background:transparent;color:transparent;caret-color:#fff;resize:none;outline:none}
+.squiggle{text-decoration:wavy underline var(--red);text-decoration-skip-ink:none}
+.tok-kw{color:var(--kw)}.tok-ty{color:var(--ty)}.tok-str{color:var(--str)}.tok-com{color:var(--com)}.tok-num{color:var(--num)}.tok-pre{color:var(--pre)}.tok-fn{color:var(--fn)}
+
+/* bottom panel (problems / output) */
+.bottom{height:190px;flex:none;background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column}
+.bottom .ptabs{height:32px;display:flex;align-items:stretch;border-bottom:1px solid var(--line);padding:0 6px}
+.bottom .ptab{padding:0 12px;display:flex;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);border-bottom:2px solid transparent;cursor:pointer;gap:6px}
+.bottom .ptab.on{color:#fff;border-bottom-color:var(--accent2)}
+.bottom .ptab .badge{background:var(--red);color:#fff;border-radius:8px;font-size:10px;padding:0 5px;min-width:16px;text-align:center}
+.bottom .pbody{flex:1;overflow:auto;padding:8px 12px;font:12px/1.6 "SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap}
+.prob{display:flex;gap:8px;align-items:flex-start;padding:3px 0;cursor:pointer}
+.prob .pi{color:var(--red);flex:none}
+.prob .pl{color:var(--accent2);flex:none}
+.prob.warn .pi{color:var(--yellow)}
+.outline{color:var(--mut)}
+.out-ok{color:var(--green)}.out-err{color:var(--red)}
+
+/* mentor panel */
+.mentor{width:340px;flex:none;background:var(--bg2);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.mentor .mhead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.mentor .mhead .av{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1f9cf0,#0e7acc);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
+.mentor .mhead b{font-size:14px}
+.mentor .mhead .prog{margin-left:auto;font-size:11px;color:var(--mut)}
+.mentor .mbody{flex:1;overflow-y:auto;padding:16px}
+.step-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:8px;display:flex;gap:8px;align-items:center}
+.step-title .n{background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.theory{font-size:13.5px;line-height:1.65;color:#d4d4d4}
+.theory p{margin-bottom:10px}
+.theory code{background:#0b0b0b;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--str);font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px}
+.theory b{color:#fff}
+.task{margin-top:12px;background:rgba(31,156,240,.1);border:1px solid rgba(31,156,240,.35);border-radius:8px;padding:10px 12px;font-size:13px}
+.task .tt{color:var(--accent2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px}
+.hintbox{margin-top:10px;background:#0b0b0b;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;color:var(--green)}
+.fb{margin-top:12px;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5}
+.fb.err{background:rgba(241,76,76,.12);border:1px solid rgba(241,76,76,.4);color:#ffb3b3}
+.fb.ok{background:rgba(78,201,176,.12);border:1px solid rgba(78,201,176,.4);color:#aef0e0}
+.mbtns{padding:12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.btn{padding:9px 12px;border-radius:7px;font-size:13px;font-weight:600;text-align:center;transition:.1s}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent2)}
+.btn.ghost{background:#3a3d41;color:#fff}
+.btn.ghost:hover{background:#45494e}
+.btn.run{background:#16825d;color:#fff}
+.btn.run:hover{background:#1a9e70}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:8px}.row .btn{flex:1}
+@media(max-width:1100px){.mentor{width:300px}}
+@media(max-width:760px){
+  .main{flex-direction:column}
+  .editorcol{flex:2}
+  .mentor{width:100%;border-left:0;border-top:1px solid var(--line);max-height:42vh}
+  .bottom{height:130px}
+}
+
+/* статус-бар */
+.status{height:24px;background:var(--accent);color:#fff;display:flex;align-items:center;font-size:12px;flex:none}
+.status .s{padding:0 10px;height:100%;display:flex;align-items:center;gap:6px}
+.status .s.right{margin-left:auto}
+.status .err{background:rgba(0,0,0,.18)}
+.spin{display:inline-block;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#16825d;color:#fff;padding:10px 18px;border-radius:8px;font-weight:600;z-index:90;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:pop .25s}
+@keyframes pop{from{transform:translate(-50%,12px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <span class="dots"><i></i><i></i><i></i></span>
+    <span class="menu"><span>Файл</span><span>Правка</span><span>Вид</span><span>Запуск</span><span>Справка</span></span>
+    <span id="titletext">main.cpp — C++ Trainer</span>
+  </div>
+  <div class="main">
+    <div class="activity">
+      <button class="on" title="Проводник">📄</button>
+      <button title="Поиск">🔍</button>
+      <button title="Запуск">▶️</button>
+      <button title="Расширения">🧩</button>
+    </div>
+    <div class="side">
+      <h2>Тренажёр · уроки</h2>
+      <div id="files"></div>
+      <div style="margin-top:auto;padding:14px 16px;font-size:11px;color:var(--mut);line-height:1.5;border-top:1px solid var(--line)">
+        Пиши код в редакторе — наставник справа подсказывает следующий шаг и подсвечивает ошибки.
+      </div>
+    </div>
+    <div class="editorcol">
+      <div class="tabs"><div class="tab dirty" id="tab"><span class="ic">📄</span><span id="tabname">main.cpp</span><span class="dot"></span></div></div>
+      <div class="editwrap">
+        <div class="gutter" id="gutter"></div>
+        <div class="codearea">
+          <pre id="hl"><code></code></pre>
+          <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="ptabs">
+          <div class="ptab on" data-p="problems">Проблемы <span class="badge" id="probbadge" style="display:none">0</span></div>
+          <div class="ptab" data-p="output">Вывод</div>
+          <div class="ptab" data-p="terminal">Терминал</div>
+        </div>
+        <div class="pbody" id="pbody"></div>
+      </div>
+    </div>
+    <div class="mentor">
+      <div class="mhead"><div class="av">🧑‍🏫</div><b>Наставник</b><span class="prog" id="prog"></span></div>
+      <div class="mbody" id="mbody"></div>
+      <div class="mbtns" id="mbtns"></div>
+    </div>
+  </div>
+  <div class="status">
+    <span class="s" id="st-pos">Стр 1, Стлб 1</span>
+    <span class="s err" id="st-err">✓ 0 ошибок</span>
+    <span class="s right">C++17</span>
+    <span class="s">UTF-8</span>
+    <span class="s">C++ Trainer</span>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ===================== данные уроков ===================== */
+// Каждый шаг: theory, task, snippet (что добавить), apply(code)->code, done(code)->bool, errors:[{when,msg}]
+const has = (c, re) => re.test(c);
+const stripStr = c => c.replace(/"(?:[^"\\]|\\.)*"/g,'""'); // убрать содержимое строк для проверок
+
+// вставка строки внутрь main перед "return 0;"
+function insertInMain(code, lineText){
+  if(/\breturn\s+0\s*;/.test(code)){
+    return code.replace(/(\n?)([ \t]*)return\s+0\s*;/, (m,nl,ind)=> '\n'+(ind||'    ')+lineText + m.replace(/^\n?/,'\n'));
+  }
+  if(/\{\s*\}/.test(code)) return code.replace(/\{\s*\}/, '{\n    '+lineText+'\n}');
+  return code + '\n' + lineText;
+}
+function ensureTop(code, inc){ return has(code, new RegExp(inc.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))) ? code : inc + '\n' + code; }
+
+const LESSONS = [
+{
+  id:'hello', file:'hello.cpp', title:'Hello, World!',
+  intro:'Соберём первую программу на C++ — она выведет строчку текста.',
+  steps:[
+    {
+      title:'Подключаем библиотеку',
+      theory:'<p>Программа на C++ собирается из готовых «кирпичиков» — <b>библиотек</b>. Чтобы выводить текст на экран, нужна библиотека ввода-вывода <b>iostream</b> (input-output stream).</p><p>Подключают её <b>директивой препроцессора</b> <code>#include</code>. Системные библиотеки пишут в угловых скобках <code>&lt; &gt;</code>.</p>',
+      task:'Подключи библиотеку <code>iostream</code>.',
+      snippet:'#include <iostream>',
+      apply:c=>ensureTop(c,'#include <iostream>'),
+      done:c=>/#\s*include\s*<\s*iostream\s*>/.test(c),
+      errors:[
+        {when:c=>/^\s*include\s*</m.test(c)&&!/#\s*include/.test(c), msg:'Директивы препроцессора начинаются с символа <code>#</code>. Напиши <code>#include</code>.'},
+        {when:c=>/#\s*include\s*"\s*iostream\s*"/.test(c), msg:'Системные библиотеки подключают в угловых скобках <code>&lt;iostream&gt;</code>, а не в кавычках. Кавычки — для своих заголовочных файлов.'},
+        {when:c=>/#\s*include\s*<\s*(?!iostream\b)[a-z_]+\s*>/.test(c), msg:'Подключена не та библиотека. Для вывода в консоль нужна именно <code>&lt;iostream&gt;</code>.'},
+        {when:c=>/#\s*include\s*<\s*iostream\s*>\s*;/.test(c), msg:'После <code>#include</code> точка с запятой не нужна — это директива препроцессора, а не инструкция.'},
+      ]
+    },
+    {
+      title:'Точка входа — функция main',
+      theory:'<p>Выполнение любой программы начинается с функции <b>main</b> — это «точка входа». Она возвращает целое число <code>int</code> — код завершения: <code>0</code> значит «программа отработала без ошибок».</p><p>Тело функции — в фигурных скобках <code>{ }</code>.</p>',
+      task:'Добавь функцию <code>int main()</code>, которая возвращает <code>0</code>.',
+      snippet:'int main() {\n    \n    return 0;\n}',
+      apply:c=> /\bmain\s*\(/.test(c) ? c : c.replace(/\s*$/,'') + '\n\nint main() {\n    \n    return 0;\n}\n',
+      done:c=>/\bint\s+main\s*\(\s*\)/.test(c) && /\breturn\s+0\s*;/.test(c),
+      errors:[
+        {when:c=>/\bvoid\s+main\b/.test(c), msg:'<code>main</code> должна возвращать <code>int</code>, а не <code>void</code> — этого требует стандарт C++.'},
+        {when:c=>/\bmain\s*\(/.test(c)&&!/\bint\s+main\s*\(/.test(c), msg:'Перед <code>main</code> укажи тип возвращаемого значения — <code>int</code>.'},
+        {when:c=>/\bint\s+main\s*\(\s*\)/.test(c)&&/\bmain\b/.test(c)&&!/\{/.test(c.split('main')[1]||''), msg:'У функции должно быть тело в фигурных скобках <code>{ }</code>.'},
+      ]
+    },
+    {
+      title:'Выводим текст',
+      theory:'<p>Вывод в консоль делает объект <b>std::cout</b>. Текст «вливают» в него оператором <code>&lt;&lt;</code>. <code>std::endl</code> — перевод строки.</p><p><code>std::</code> — это <b>пространство имён</b> (namespace), в котором живёт <code>cout</code>. Без него компилятор не найдёт имя.</p>',
+      task:'Внутри <code>main</code> выведи строку <code>Hello, world!</code>',
+      snippet:'std::cout << "Hello, world!" << std::endl;',
+      apply:c=>insertInMain(c,'std::cout << "Hello, world!" << std::endl;'),
+      done:c=>/cout\s*<<\s*"[^"]*[Hh]ello,?\s*[Ww]orld[^"]*"/.test(c) && (/std::\s*cout/.test(c)||/using\s+namespace\s+std/.test(c)),
+      errors:[
+        {when:c=>/\bprintf\s*\(/.test(c), msg:'Это C++ — для вывода используем <code>std::cout</code>, а не <code>printf</code> из языка C.'},
+        {when:c=>/\bcout\b/.test(c)&&!/std::\s*cout/.test(c)&&!/using\s+namespace\s+std/.test(c), msg:'<code>cout</code> живёт в пространстве имён <code>std</code>. Пиши <code>std::cout</code> (или добавь сверху <code>using namespace std;</code>).'},
+        {when:c=>/cout\s*<<\s*[A-Za-zА-Яа-я]/.test(stripStr(c))&&!/cout\s*<<\s*("|std)/.test(c), msg:'Текст нужно взять в двойные кавычки: <code>"Hello, world!"</code>.'},
+        {when:c=>/\bcout\b[^\n;]*$/m.test(c)&&/\bcout\b[^\n]*\n/.test(c)&&!/cout[^\n]*;/.test(c), msg:'Каждая инструкция заканчивается точкой с запятой <code>;</code>.'},
+      ]
+    }
+  ],
+  output:'Hello, world!'
+},
+{
+  id:'io', file:'input.cpp', title:'Переменные и ввод',
+  intro:'Считаем число с клавиатуры и выведем его удвоенным.',
+  steps:[
+    {
+      title:'Библиотека и main',
+      theory:'<p>Снова нужна <code>&lt;iostream&gt;</code> (там и ввод <code>std::cin</code>, и вывод <code>std::cout</code>) и функция <code>main</code>.</p>',
+      task:'Подключи <code>iostream</code> и добавь каркас <code>int main()</code> с <code>return 0;</code>.',
+      snippet:'#include <iostream>\n\nint main() {\n    \n    return 0;\n}',
+      apply:c=>{c=ensureTop(c,'#include <iostream>'); if(!/\bmain\s*\(/.test(c)) c+='\n\nint main() {\n    \n    return 0;\n}\n'; return c;},
+      done:c=>/#\s*include\s*<\s*iostream\s*>/.test(c)&&/\bint\s+main\s*\(\s*\)/.test(c)&&/return\s+0\s*;/.test(c),
+      errors:[
+        {when:c=>/\bmain\s*\(/.test(c)&&!/#\s*include\s*<\s*iostream\s*>/.test(c), msg:'Не хватает <code>#include &lt;iostream&gt;</code> — без неё <code>cin</code>/<code>cout</code> не существуют.'},
+        {when:c=>/\bvoid\s+main\b/.test(c), msg:'<code>main</code> возвращает <code>int</code>, а не <code>void</code>.'},
+      ]
+    },
+    {
+      title:'Объявляем переменную',
+      theory:'<p>Чтобы хранить число, нужна <b>переменная</b>. У переменной есть <b>тип</b> (для целых — <code>int</code>) и <b>имя</b>. Объявление: <code>int n;</code></p>',
+      task:'Внутри <code>main</code> объяви целочисленную переменную <code>n</code>.',
+      snippet:'int n;',
+      apply:c=>insertInMain(c,'int n;'),
+      done:c=>/\bint\s+[a-zA-Z_]\w*\s*(=|;)/.test((c.split('main')[1]||'')),
+      errors:[
+        {when:c=>/\b(integer|Int|INT)\s+\w+\s*;/.test(c), msg:'Целочисленный тип пишется строчными буквами: <code>int</code>.'},
+        {when:c=>/^\s*n\s*;/m.test(c)&&!/\bint\s+n/.test(c), msg:'У переменной нужно указать тип: <code>int n;</code> — C++ строго типизирован.'},
+      ]
+    },
+    {
+      title:'Читаем ввод',
+      theory:'<p>Ввод с клавиатуры — объект <b>std::cin</b> и оператор <code>&gt;&gt;</code> (стрелки «в переменную»). <code>std::cin &gt;&gt; n;</code> прочитает число и положит его в <code>n</code>.</p>',
+      task:'Считай значение в переменную <code>n</code>.',
+      snippet:'std::cin >> n;',
+      apply:c=>insertInMain(c,'std::cin >> n;'),
+      done:c=>/cin\s*>>\s*n/.test(c)&&(/std::\s*cin/.test(c)||/using\s+namespace\s+std/.test(c)),
+      errors:[
+        {when:c=>/cin\s*<<\s*n/.test(c), msg:'Для ввода стрелки направлены «в переменную»: <code>cin &gt;&gt; n</code>, а не <code>&lt;&lt;</code>.'},
+        {when:c=>/\bcin\b/.test(c)&&!/std::\s*cin/.test(c)&&!/using\s+namespace\s+std/.test(c), msg:'<code>cin</code> тоже из <code>std</code>: пиши <code>std::cin</code>.'},
+        {when:c=>/\bscanf\s*\(/.test(c), msg:'В C++ читаем через <code>std::cin</code>, а не <code>scanf</code>.'},
+      ]
+    },
+    {
+      title:'Выводим результат',
+      theory:'<p>В один <code>cout</code> можно «влить» несколько значений подряд: и текст, и переменную. Например <code>std::cout &lt;&lt; "Удвоено: " &lt;&lt; n*2 &lt;&lt; std::endl;</code></p>',
+      task:'Выведи <code>n * 2</code> (можно с поясняющим текстом).',
+      snippet:'std::cout << n * 2 << std::endl;',
+      apply:c=>insertInMain(c,'std::cout << n * 2 << std::endl;'),
+      done:c=>/cout\s*<<[^;]*n\s*\*\s*2/.test(c)||/cout\s*<<[^;]*2\s*\*\s*n/.test(c),
+      errors:[
+        {when:c=>/\bcout\b/.test(c)&&!/std::\s*cout/.test(c)&&!/using\s+namespace\s+std/.test(c), msg:'<code>std::cout</code> — не забывай про <code>std::</code>.'},
+      ]
+    }
+  ],
+  output:'(введи число — например 21 — программа выведет 42)', stdin:'21', expect:'42'
+},
+{
+  id:'branch', file:'branch.cpp', title:'Условие if / else',
+  intro:'Определим, чётное число или нечётное.',
+  steps:[
+    {
+      title:'Каркас + переменная',
+      theory:'<p>Старт как обычно: <code>&lt;iostream&gt;</code>, <code>main</code>, переменная <code>int n;</code> и чтение <code>std::cin &gt;&gt; n;</code>.</p>',
+      task:'Сделай каркас, объяви <code>n</code> и считай её.',
+      snippet:'#include <iostream>\n\nint main() {\n    int n;\n    std::cin >> n;\n    \n    return 0;\n}',
+      apply:c=>'#include <iostream>\n\nint main() {\n    int n;\n    std::cin >> n;\n    \n    return 0;\n}\n',
+      done:c=>/#\s*include\s*<\s*iostream\s*>/.test(c)&&/\bint\s+main/.test(c)&&/\bint\s+n/.test(c)&&/cin\s*>>\s*n/.test(c),
+      errors:[]
+    },
+    {
+      title:'Проверяем условие',
+      theory:'<p><b>if</b> выполняет блок, если условие истинно. Число чётное, если остаток от деления на 2 равен нулю: <code>n % 2 == 0</code>.</p><p>Внимание: сравнение — это <b>двойное</b> равно <code>==</code>. Одинарное <code>=</code> — это присваивание (частая ошибка!).</p>',
+      task:'Добавь <code>if (n % 2 == 0)</code> и выведи в нём «Чётное».',
+      snippet:'if (n % 2 == 0) {\n        std::cout << "Чётное" << std::endl;\n    }',
+      apply:c=>insertInMain(c,'if (n % 2 == 0) {\n        std::cout << "Чётное" << std::endl;\n    }'),
+      done:c=>/if\s*\(\s*n\s*%\s*2\s*==\s*0\s*\)/.test(c)&&/cout\s*<<\s*"[^"]*[Чч][её]тн/.test(c),
+      errors:[
+        {when:c=>/if\s*\(\s*n\s*%\s*2\s*=\s*0/.test(c), msg:'В условии нужно <b>сравнение</b> <code>==</code>, а не присваивание <code>=</code>. Должно быть <code>n % 2 == 0</code>.'},
+        {when:c=>/\bif\b/.test(c)&&!/if\s*\(/.test(c), msg:'Условие <code>if</code> пишется в круглых скобках: <code>if (...)</code>.'},
+        {when:c=>/if\s*\([^)]*\)\s*;/.test(c), msg:'После <code>if (...)</code> не ставят <code>;</code> — иначе тело «оторвётся» от условия.'},
+      ]
+    },
+    {
+      title:'Иначе — else',
+      theory:'<p><b>else</b> выполняется, когда условие <code>if</code> ложно. Пишется сразу после блока <code>if</code>.</p>',
+      task:'Добавь <code>else</code> и выведи в нём «Нечётное».',
+      snippet:'else {\n        std::cout << "Нечётное" << std::endl;\n    }',
+      apply:c=>c.replace(/(\}\s*)(\n\s*return)/, '$1 else {\n        std::cout << "Нечётное" << std::endl;\n    }$2'),
+      done:c=>/\belse\b/.test(c)&&/cout\s*<<\s*"[^"]*[Нн]еч[её]тн/.test(c),
+      errors:[
+        {when:c=>/\belse\s+if\s*\(\s*\)/.test(c), msg:'Просто <code>else</code> без условия — он срабатывает во всех остальных случаях.'},
+      ]
+    }
+  ],
+  output:'(введи число — чётное/нечётное)', stdin:'7', expect:'Нечётное'
+},
+{
+  id:'loop', file:'loop.cpp', title:'Цикл for',
+  intro:'Посчитаем сумму чисел от 1 до 5.',
+  steps:[
+    {
+      title:'Каркас и переменная суммы',
+      theory:'<p>Заведём переменную-накопитель <code>int sum = 0;</code> — в неё будем складывать. Инициализировать нулём важно: иначе там «мусор».</p>',
+      task:'Каркас + <code>int sum = 0;</code>',
+      snippet:'#include <iostream>\n\nint main() {\n    int sum = 0;\n    \n    return 0;\n}',
+      apply:c=>'#include <iostream>\n\nint main() {\n    int sum = 0;\n    \n    return 0;\n}\n',
+      done:c=>/#\s*include\s*<\s*iostream\s*>/.test(c)&&/\bint\s+sum\s*=\s*0/.test(c),
+      errors:[
+        {when:c=>/\bint\s+sum\s*;/.test(c)&&!/sum\s*=\s*0/.test(c), msg:'Накопитель лучше сразу обнулить: <code>int sum = 0;</code> — иначе в переменной случайное значение.'},
+      ]
+    },
+    {
+      title:'Цикл for',
+      theory:'<p><b>for</b> состоит из трёх частей через <code>;</code>: <code>for (инициализация; условие; шаг)</code>. Классика: <code>for (int i = 1; i &lt;= 5; i++)</code> — <code>i</code> пробежит 1,2,3,4,5.</p>',
+      task:'Добавь <code>for</code> от 1 до 5 и в теле <code>sum += i;</code>',
+      snippet:'for (int i = 1; i <= 5; i++) {\n        sum += i;\n    }',
+      apply:c=>insertInMain(c,'for (int i = 1; i <= 5; i++) {\n        sum += i;\n    }'),
+      done:c=>/for\s*\(\s*int\s+i\s*=\s*1\s*;\s*i\s*<=?\s*5\s*;\s*i\s*(\+\+|\+=\s*1)\s*\)/.test(c)&&/sum\s*\+=\s*i|sum\s*=\s*sum\s*\+\s*i/.test(c),
+      errors:[
+        {when:c=>/for\s*\([^)]*,[^)]*\)/.test(c), msg:'Части цикла <code>for</code> разделяются точкой с запятой <code>;</code>, а не запятой.'},
+        {when:c=>/for\s*\(\s*int\s+i\s*=\s*1\s*;\s*i\s*<\s*5\s*;/.test(c), msg:'С условием <code>i &lt; 5</code> цикл дойдёт только до 4. Чтобы включить 5, нужно <code>i &lt;= 5</code>.'},
+        {when:c=>/\bfor\b/.test(c)&&!/for\s*\(/.test(c), msg:'После <code>for</code> идут круглые скобки с тремя частями.'},
+      ]
+    },
+    {
+      title:'Выводим сумму',
+      theory:'<p>После цикла в <code>sum</code> лежит результат. Выведи его.</p>',
+      task:'Выведи <code>sum</code>.',
+      snippet:'std::cout << sum << std::endl;',
+      apply:c=>insertInMain(c,'std::cout << sum << std::endl;'),
+      done:c=>/cout\s*<<[^;]*\bsum\b/.test(c),
+      errors:[]
+    }
+  ],
+  output:'15'
+},
+{
+  id:'func', file:'function.cpp', title:'Своя функция',
+  intro:'Напишем функцию, возводящую число в квадрат.',
+  steps:[
+    {
+      title:'Объявляем функцию',
+      theory:'<p>Функция — это переиспользуемый кусок кода. У неё есть <b>тип результата</b>, <b>имя</b>, <b>параметры</b> и <b>тело</b>. Возвращает значение <code>return</code>.</p><p>Функцию пишут <b>до</b> <code>main</code> (компилятор однопроходный — должен знать о ней заранее).</p>',
+      task:'Над <code>main</code> объяви <code>int square(int x)</code>, возвращающую <code>x * x</code>.',
+      snippet:'int square(int x) {\n    return x * x;\n}',
+      apply:c=>/\bsquare\s*\(/.test(c)?c:('int square(int x) {\n    return x * x;\n}\n\n'+(/\bmain\s*\(/.test(c)?c:'int main() {\n    \n    return 0;\n}\n')),
+      done:c=>/\bint\s+square\s*\(\s*int\s+\w+\s*\)/.test(c)&&/return\s+\w+\s*\*\s*\w+/.test(c),
+      errors:[
+        {when:c=>/\bsquare\s*\(\s*x\s*\)/.test(c)&&!/square\s*\(\s*int/.test(c), msg:'У параметра функции нужно указать тип: <code>square(int x)</code>.'},
+        {when:c=>/\bvoid\s+square\b/.test(c), msg:'Функция должна <b>возвращать</b> число, значит тип результата <code>int</code>, а не <code>void</code>.'},
+      ]
+    },
+    {
+      title:'main и вызов',
+      theory:'<p>Теперь вызовем функцию из <code>main</code>: <code>square(5)</code> вернёт 25. Результат можно сразу вывести.</p>',
+      task:'В <code>main</code> выведи <code>square(5)</code>.',
+      snippet:'std::cout << square(5) << std::endl;',
+      apply:c=>{if(!/\bmain\s*\(/.test(c))c+='\nint main() {\n    \n    return 0;\n}\n'; if(!/#\s*include\s*<\s*iostream\s*>/.test(c))c='#include <iostream>\n\n'+c; return insertInMain(c,'std::cout << square(5) << std::endl;');},
+      done:c=>/#\s*include\s*<\s*iostream\s*>/.test(c)&&/cout\s*<<[^;]*square\s*\(\s*5\s*\)/.test(c),
+      errors:[
+        {when:c=>/\bsquare\s*\(\s*5\s*\)/.test(c)&&!/#\s*include\s*<\s*iostream\s*>/.test(c), msg:'Для вывода нужна <code>#include &lt;iostream&gt;</code> в начале файла.'},
+      ]
+    }
+  ],
+  output:'25'
+},
+{
+  id:'vector', file:'vector.cpp', title:'Вектор и range-for',
+  intro:'Соберём числа в std::vector и пройдёмся по ним циклом.',
+  steps:[
+    {
+      title:'Подключаем vector',
+      theory:'<p><b>std::vector</b> — динамический массив (умеет расти). Живёт в отдельной библиотеке <code>&lt;vector&gt;</code>, её надо подключить вдобавок к <code>&lt;iostream&gt;</code>.</p>',
+      task:'Подключи <code>&lt;iostream&gt;</code> и <code>&lt;vector&gt;</code>, добавь <code>main</code>.',
+      snippet:'#include <iostream>\n#include <vector>\n\nint main() {\n    \n    return 0;\n}',
+      apply:c=>'#include <iostream>\n#include <vector>\n\nint main() {\n    \n    return 0;\n}\n',
+      done:c=>/#\s*include\s*<\s*iostream\s*>/.test(c)&&/#\s*include\s*<\s*vector\s*>/.test(c)&&/\bint\s+main/.test(c),
+      errors:[
+        {when:c=>/std::vector/.test(c)&&!/#\s*include\s*<\s*vector\s*>/.test(c), msg:'Используешь <code>vector</code>, но не подключил <code>#include &lt;vector&gt;</code>.'},
+      ]
+    },
+    {
+      title:'Создаём вектор',
+      theory:'<p>Создадим вектор целых с тремя числами: <code>std::vector&lt;int&gt; v = {10, 20, 30};</code>. В угловых скобках — <b>тип элементов</b>.</p>',
+      task:'Объяви <code>std::vector&lt;int&gt; v = {10, 20, 30};</code>',
+      snippet:'std::vector<int> v = {10, 20, 30};',
+      apply:c=>insertInMain(c,'std::vector<int> v = {10, 20, 30};'),
+      done:c=>/std::vector\s*<\s*int\s*>\s*\w+\s*=\s*\{[^}]*\}/.test(c),
+      errors:[
+        {when:c=>/vector\s+\w+/.test(c)&&!/vector\s*</.test(c), msg:'У вектора надо указать тип элементов в угловых скобках: <code>vector&lt;int&gt;</code>.'},
+        {when:c=>/\bvector\s*</.test(c)&&!/std::\s*vector/.test(c)&&!/using\s+namespace\s+std/.test(c), msg:'<code>vector</code> из <code>std</code>: пиши <code>std::vector</code>.'},
+      ]
+    },
+    {
+      title:'Перебираем range-for',
+      theory:'<p>Удобный способ пройти по всем элементам — <b>range-based for</b>: <code>for (int x : v) { ... }</code>. На каждом шаге <code>x</code> — очередной элемент.</p>',
+      task:'Выведи все элементы через <code>for (int x : v)</code>.',
+      snippet:'for (int x : v) {\n        std::cout << x << " ";\n    }',
+      apply:c=>insertInMain(c,'for (int x : v) {\n        std::cout << x << " ";\n    }'),
+      done:c=>/for\s*\(\s*(int|auto)\s*&?\s*\w+\s*:\s*v\s*\)/.test(c)&&/cout\s*<<\s*\w/.test(c),
+      errors:[
+        {when:c=>/for\s*\(\s*(int|auto)\s+\w+\s*:\s*v[^)]*;/.test(c), msg:'В range-for только две части через двоеточие: <code>for (int x : v)</code> — без точек с запятой.'},
+      ]
+    }
+  ],
+  output:'10 20 30'
+}
+];
+
+/* ===================== подсветка ===================== */
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hlLine(t){
+  // t уже экранирован
+  const hold=[];
+  t=t.replace(/(\/\/.*)|(&quot;.*?&quot;|".*?")|('.')/g,m=>{hold.push(/^\/\//.test(m)?'<span class="tok-com">'+m+'</span>':'<span class="tok-str">'+m+'</span>');return ' '+(hold.length-1)+' ';});
+  t=t.replace(/(#\s*include|#\s*define|#\s*ifndef|#\s*ifdef|#\s*endif|#\s*pragma)/g,'<span class="tok-pre">$1</span>');
+  t=t.replace(/&lt;[\w.\/]+&gt;/g,'<span class="tok-str">$&</span>');
+  t=t.replace(/\b(return|if|else|for|while|do|switch|case|break|continue|using|namespace|struct|class|public|private|true|false|const|new|delete|nullptr)\b/g,'<span class="tok-kw">$1</span>');
+  t=t.replace(/\b(int|double|float|char|void|bool|auto|unsigned|long|short|size_t|std|vector|string)\b/g,'<span class="tok-ty">$1</span>');
+  t=t.replace(/\b(\d+)\b/g,'<span class="tok-num">$1</span>');
+  t=t.replace(/\b([a-zA-Z_]\w*)\s*(?=\()/g,'<span class="tok-fn">$1</span>');
+  t=t.replace(/ (\d+) /g,(m,i)=>hold[+i]);
+  return t;
+}
+function highlight(code, errLines){
+  return code.split('\n').map((ln,i)=>{
+    let h=hlLine(esc(ln))||'&nbsp;';
+    if(errLines && errLines.has(i)) h='<span class="squiggle">'+h+'</span>';
+    return h;
+  }).join('\n');
+}
+
+/* ===================== движок ===================== */
+const $=s=>document.querySelector(s);
+const codeEl=$('#code'), preEl=$('#hl'), hlEl=preEl.firstElementChild, gutterEl=$('#gutter');
+const STKEY='cpptrainer_v1';
+let progress={}; try{progress=JSON.parse(localStorage.getItem(STKEY))||{};}catch(e){}
+let li=0, si=0, problems=[], curErr=null, bottomTab='problems', lastRun='';
+
+function lineOf(code, re){ const m=re.exec(code); if(!m) return -1; return code.slice(0,m.index).split('\n').length-1; }
+
+function evaluate(){
+  const code=codeEl.value;
+  const lesson=LESSONS[li];
+  problems=[]; const errLines=new Set(); curErr=null;
+  let advanced=false;
+  while(si<lesson.steps.length){
+    const step=lesson.steps[si];
+    let hit=null;
+    for(const e of step.errors){ if(e.when(code)){ hit=e; break; } }
+    if(hit){
+      curErr=hit.msg;
+      const ln=lineOf(code, firstReOf(hit));
+      problems.push({line:(ln>=0?ln:0), msg:hit.msg, sev:'err'});
+      if(ln>=0) errLines.add(ln);
+      break; // на текущем шаге есть ошибка — стоп
+    }
+    if(step.done(code)){ si++; advanced=true; continue; } // шаг пройден — идём дальше по цепочке
+    break; // текущий шаг ещё не выполнен и без ошибок
+  }
+  if(advanced){ flashOk(); if(si>=lesson.steps.length) markBuilt(); }
+  renderEditor(code, errLines);
+  renderMentor();
+  renderProblems();
+  updateStatus(code, errLines.size);
+}
+// достаём regex из детектора (для номера строки) — эвристика: ищем первый /.../ в исходнике when
+function firstReOf(e){ const s=e.when.toString(); const m=s.match(/\/((?:\\.|[^\/])+)\/[a-z]*/); try{return m?new RegExp(m[1]):/X^/;}catch(_){return /X^/;} }
+
+function flashOk(){ const t=document.createElement('div'); t.className='toast'; t.textContent='✓ Шаг пройден!'; document.body.appendChild(t); setTimeout(()=>t.remove(),1200); }
+function markBuilt(){}
+
+function renderEditor(code, errLines){
+  hlEl.innerHTML=highlight(code, errLines);
+  const n=code.split('\n').length;
+  let g=''; for(let i=1;i<=n;i++) g+='<div>'+i+'</div>';
+  gutterEl.innerHTML='<div class="gi">'+g+'</div>';
+  syncScroll();
+}
+function syncScroll(){
+  preEl.scrollTop=codeEl.scrollTop; preEl.scrollLeft=codeEl.scrollLeft;
+  const gi=gutterEl.firstElementChild; if(gi) gi.style.transform='translateY('+(-codeEl.scrollTop)+'px)';
+}
+function renderMentor(){
+  const lesson=LESSONS[li];
+  const total=lesson.steps.length;
+  $('#prog').textContent = si>=total ? 'готово ✓' : ('шаг '+(si+1)+' / '+total);
+  const mbody=$('#mbody'), mbtns=$('#mbtns');
+  if(si>=total){
+    mbody.innerHTML='<div class="step-title"><span class="n">✓</span>Программа собрана!</div>'+
+      '<div class="theory"><p>Отлично — программа готова. Нажми <b>▶ Запустить</b>: код скомпилируется по-настоящему (gcc, C++17) и ты увидишь вывод.</p></div>'+
+      '<div class="task"><span class="tt">Ожидаемый вывод</span>'+esc(lesson.output)+'</div>'+
+      (lastRun?('<div class="fb '+(lastRun.ok?'ok':'err')+'">'+lastRun.html+'</div>'):'');
+    mbtns.innerHTML='<button class="btn run" id="b-run">▶ Запустить</button>'+
+      '<div class="row"><button class="btn ghost" id="b-reset">Сбросить</button>'+nextBtn()+'</div>';
+    $('#b-run').onclick=run;
+  } else {
+    const step=lesson.steps[si];
+    mbody.innerHTML='<div class="step-title"><span class="n">'+(si+1)+'</span>'+esc(step.title)+'</div>'+
+      '<div class="theory">'+step.theory+'</div>'+
+      '<div class="task"><span class="tt">Задание</span>'+step.task+'</div>'+
+      (curErr?('<div class="fb err"><b>⛔ Ошибка:</b> '+curErr+'</div>'):'')+
+      '<div id="hintwrap"></div>';
+    mbtns.innerHTML='<button class="btn ghost" id="b-hint">💡 Подсказка</button>'+
+      '<div class="row"><button class="btn ghost" id="b-insert">⌨ Вставить</button><button class="btn ghost" id="b-reset">Сбросить</button></div>';
+    $('#b-hint').onclick=()=>{ $('#hintwrap').innerHTML='<div class="hintbox">'+esc(step.snippet)+'</div>'; };
+    $('#b-insert').onclick=()=>{ codeEl.value=step.apply(codeEl.value); onEdit(); codeEl.focus(); };
+  }
+  $('#b-reset').onclick=()=>{ if(confirm('Очистить редактор и начать урок заново?')){ startLesson(li,true); } };
+  const nb=$('#b-next'); if(nb) nb.onclick=()=>{ if(li+1<LESSONS.length) startLesson(li+1); };
+}
+function nextBtn(){ return li+1<LESSONS.length ? '<button class="btn primary" id="b-next">Следующий урок →</button>' : '<button class="btn primary" disabled>Это последний урок 🎉</button>'; }
+
+function renderProblems(){
+  const badge=$('#probbadge');
+  badge.style.display = problems.length?'inline-block':'none';
+  badge.textContent=problems.length;
+  if(bottomTab==='problems'){
+    $('#pbody').innerHTML = problems.length
+      ? problems.map(p=>'<div class="prob"><span class="pi">⛔</span><span class="pl">[Стр '+(p.line+1)+']</span><span>'+stripTags(p.msg)+'</span></div>').join('')
+      : '<div class="outline">Проблем нет. Пиши код — наставник подскажет следующий шаг.</div>';
+  }
+}
+function stripTags(s){return s.replace(/<[^>]+>/g,'');}
+
+function showBottom(which){
+  bottomTab=which;
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.toggle('on',t.dataset.p===which));
+  if(which==='problems') renderProblems();
+  else if(which==='output') $('#pbody').innerHTML = lastRun? ('<span class="'+(lastRun.ok?'out-ok':'out-err')+'">'+esc(lastRun.text||'')+'</span>') : '<div class="outline">Здесь появится вывод программы после запуска.</div>';
+  else $('#pbody').innerHTML='<div class="outline">$ g++ -std=c++17 main.cpp -o main &amp;&amp; ./main</div>';
+}
+
+function updateStatus(code, errCount){
+  const pos=caretPos(code);
+  $('#st-pos').textContent='Стр '+pos.line+', Стлб '+pos.col;
+  const e=$('#st-err'); e.textContent = errCount? ('⛔ '+errCount+' '+plural(errCount,'ошибка','ошибки','ошибок')) : '✓ 0 ошибок';
+}
+function plural(n,a,b,c){const m=n%10,h=n%100;if(m===1&&h!==11)return a;if(m>=2&&m<=4&&(h<10||h>=20))return b;return c;}
+function caretPos(code){ const p=codeEl.selectionStart||0; const before=code.slice(0,p); const lines=before.split('\n'); return {line:lines.length, col:lines[lines.length-1].length+1}; }
+
+let editTimer=null;
+function onEdit(){ syncScroll(); clearTimeout(editTimer); editTimer=setTimeout(evaluate, 220); }
+
+/* запуск через бэкенд (если страница на сервере), иначе — ожидаемый вывод */
+async function run(){
+  const lesson=LESSONS[li];
+  const btn=$('#b-run'); if(btn){btn.disabled=true; btn.innerHTML='<span class="spin">⏳</span> Компиляция…';}
+  try{
+    const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:codeEl.value,lang:'cpp',stdin:lesson.stdin||''})});
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'run failed');
+    const out=(j.output||'').replace(/\s+$/,''); const cerr=(j.compile_error||'').trim();
+    if(cerr){ lastRun={ok:false, text:cerr, html:'<b>Ошибка компиляции:</b><br>'+esc(cerr).replace(/\n/g,'<br>')}; }
+    else{
+      const ok=lesson.expect? out.includes(lesson.expect): (out===lesson.output||true);
+      lastRun={ok:true, text:out||'(пустой вывод)', html:'<b>✅ Скомпилировалось и запустилось!</b><br>Вывод: <code>'+esc(out||'(пусто)')+'</code>'};
+      progress[lesson.id]=true; localStorage.setItem(STKEY,JSON.stringify(progress)); renderFiles();
+    }
+    showBottom('output');
+  }catch(e){
+    // оффлайн/без сервера — показываем ожидаемый вывод
+    lastRun={ok:true, text:lesson.output, html:'<b>Запуск (демо):</b> сервер компиляции недоступен, показываю ожидаемый вывод:<br><code>'+esc(lesson.output)+'</code>'};
+    progress[lesson.id]=true; localStorage.setItem(STKEY,JSON.stringify(progress)); renderFiles();
+    showBottom('output');
+  }
+  renderMentor();
+}
+
+/* ===================== уроки/файлы ===================== */
+function renderFiles(){
+  $('#files').innerHTML=LESSONS.map((l,i)=>{
+    const done=progress[l.id];
+    const locked=i>0 && !progress[LESSONS[i-1].id] && !done && i>unlockedUpTo();
+    return '<div class="file '+(i===li?'on':'')+(locked?' locked':'')+'" data-i="'+i+'">'+
+      '<span class="ic">📄</span><span>'+esc(l.file)+'</span>'+
+      (done?'<span class="chk">✓</span>':(locked?'<span class="lock">🔒</span>':''))+'</div>';
+  }).join('');
+  document.querySelectorAll('.file').forEach(f=>f.onclick=()=>{ const i=+f.dataset.i; if(f.classList.contains('locked'))return; startLesson(i); });
+}
+function unlockedUpTo(){ let k=0; for(let i=0;i<LESSONS.length;i++){ if(progress[LESSONS[i].id]) k=i+1; } return k; }
+
+function startLesson(i, keepIfSame){
+  li=i; si=0; lastRun=''; problems=[]; curErr=null;
+  codeEl.value='';
+  $('#tabname').textContent=LESSONS[i].file;
+  $('#titletext').textContent=LESSONS[i].file+' — C++ Trainer';
+  renderFiles();
+  // мини-интро в терминал
+  evaluate();
+  showBottom('problems');
+  codeEl.focus();
+}
+
+/* ===================== события ===================== */
+codeEl.addEventListener('input', onEdit);
+codeEl.addEventListener('scroll', syncScroll);
+function showPos(){ const p=caretPos(codeEl.value); $('#st-pos').textContent='Стр '+p.line+', Стлб '+p.col; }
+codeEl.addEventListener('keyup', showPos);
+codeEl.addEventListener('click', showPos);
+codeEl.addEventListener('keydown', e=>{
+  if(e.key==='Tab'){ e.preventDefault(); const s=codeEl.selectionStart, en=codeEl.selectionEnd; codeEl.value=codeEl.value.slice(0,s)+'    '+codeEl.value.slice(en); codeEl.selectionStart=codeEl.selectionEnd=s+4; onEdit(); }
+});
+document.querySelectorAll('.ptab').forEach(t=>t.onclick=()=>showBottom(t.dataset.p));
+
+startLesson(0);
+</script>
+</body>
+</html>

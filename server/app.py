@@ -75,14 +75,14 @@ def _compiler_for(lang: str) -> tuple[str, str]:
     return _compiler_cpp, '-std=c++17'
 
 
-async def _wandbox(code: str, lang: str) -> dict:
+async def _wandbox(code: str, lang: str, stdin: str = '') -> dict:
     compiler, std = _compiler_for(lang)
     payload = {
         'code': code,
         'compiler': compiler,
         'options': '',
         'compiler-option-raw': std,
-        'stdin': '',
+        'stdin': stdin,
         'save': False,
     }
     headers = {'User-Agent': 'cpp-hero/1.0', 'Accept': 'application/json'}
@@ -158,19 +158,20 @@ async def api_run(request: web.Request) -> web.Response:
         return web.json_response({'ok': False, 'error': 'код слишком большой'}, status=400)
 
     lang = 'c' if body.get('lang') == 'c' else 'cpp'
+    stdin = str(body.get('stdin') or '')[:2000]
     user = _auth_from_request(request, body)
     ident = str(user['id']) if user else 'ip:' + _client_ip(request)
     if not await storage.rate_ok(f'run:{ident}', 3):
         return web.json_response({'ok': False, 'error': 'слишком часто, подожди пару секунд'}, status=429)
 
     compiler, _ = _compiler_for(lang)
-    cache_key = 'runcache:' + hashlib.sha256((compiler + '|' + code).encode()).hexdigest()
+    cache_key = 'runcache:' + hashlib.sha256((compiler + '|' + stdin + '|' + code).encode()).hexdigest()
     cached = await storage.kv_get(cache_key)
     if cached:
         return web.json_response(json.loads(cached))
 
     try:
-        data = await _wandbox(code, lang)
+        data = await _wandbox(code, lang, stdin)
     except Exception as e:
         log.warning('wandbox error: %s', e)
         return web.json_response({'ok': False, 'error': 'компилятор недоступен, попробуй ещё раз'}, status=502)
@@ -190,6 +191,10 @@ async def page_index(_: web.Request) -> web.FileResponse:
     return web.FileResponse(ROOT / 'index.html')
 
 
+async def page_ide(_: web.Request) -> web.FileResponse:
+    return web.FileResponse(ROOT / 'ide.html')
+
+
 _STATIC_JS = {'data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'theory.js', 'theory_c.js', 'langs.js'}
 
 
@@ -205,6 +210,8 @@ def build_web_app() -> web.Application:
     # отдаём только явные маршруты — server/ и .env наружу не торчат
     app.router.add_get('/', page_index)
     app.router.add_get('/index.html', page_index)
+    app.router.add_get('/ide', page_ide)
+    app.router.add_get('/ide.html', page_ide)
     app.router.add_get('/data.js', page_js)
     app.router.add_get('/data_c.js', page_js)
     app.router.add_get('/extra.js', page_js)
