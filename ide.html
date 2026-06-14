@@ -462,16 +462,21 @@ const LESSONS = [
 /* ===================== подсветка ===================== */
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function hlLine(t){
-  // t уже экранирован
+  // t уже экранирован (esc). Прячем строки/комментарии/директивы в плейсхолдеры из
+  // приватной области Unicode, чтобы последующие правила не лезли внутрь вставленных тегов.
   const hold=[];
-  t=t.replace(/(\/\/.*)|(&quot;.*?&quot;|".*?")|('.')/g,m=>{hold.push(/^\/\//.test(m)?'<span class="tok-com">'+m+'</span>':'<span class="tok-str">'+m+'</span>');return ' '+(hold.length-1)+' ';});
-  t=t.replace(/(#\s*include|#\s*define|#\s*ifndef|#\s*ifdef|#\s*endif|#\s*pragma)/g,'<span class="tok-pre">$1</span>');
-  t=t.replace(/&lt;[\w.\/]+&gt;/g,'<span class="tok-str">$&</span>');
-  t=t.replace(/\b(return|if|else|for|while|do|switch|case|break|continue|using|namespace|struct|class|public|private|true|false|const|new|delete|nullptr)\b/g,'<span class="tok-kw">$1</span>');
+  const stash = html => String.fromCharCode(0xE100 + (hold.push(html) - 1));
+  t=t.replace(/\/\/.*/g, m=>stash('<span class="tok-com">'+m+'</span>'));
+  t=t.replace(/&quot;[^]*?&quot;|"[^"]*"|'(?:\\.|[^'])'/g, m=>stash('<span class="tok-str">'+m+'</span>'));
+  t=t.replace(/#\s*[a-z]+/g, m=>stash('<span class="tok-pre">'+m+'</span>'));
+  t=t.replace(/&lt;[\w.\/+]+&gt;/g, m=>stash('<span class="tok-str">'+m+'</span>'));
+  // теперь во тексте нет вставленного HTML — безопасно красим ключевые слова, типы, числа, функции
+  t=t.replace(/\b(return|if|else|for|while|do|switch|case|break|continue|using|namespace|struct|class|public|private|protected|true|false|const|new|delete|nullptr|virtual|override)\b/g,'<span class="tok-kw">$1</span>');
   t=t.replace(/\b(int|double|float|char|void|bool|auto|unsigned|long|short|size_t|std|vector|string)\b/g,'<span class="tok-ty">$1</span>');
   t=t.replace(/\b(\d+)\b/g,'<span class="tok-num">$1</span>');
-  t=t.replace(/\b([a-zA-Z_]\w*)\s*(?=\()/g,'<span class="tok-fn">$1</span>');
-  t=t.replace(/ (\d+) /g,(m,i)=>hold[+i]);
+  t=t.replace(/\b([a-zA-Z_]\w*)(\s*\()/g,'<span class="tok-fn">$1</span>$2');
+  // возвращаем плейсхолдеры на место в самом конце
+  t=t.replace(/[-]/g, c=>hold[c.charCodeAt(0)-0xE100]);
   return t;
 }
 function highlight(code, errLines){
