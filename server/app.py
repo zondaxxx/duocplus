@@ -92,6 +92,68 @@ async def _wandbox(code: str, lang: str, stdin: str = '') -> dict:
             raise RuntimeError(f'wandbox http {r.status}')
         return json.loads(await r.text())  # mimetype может быть не application/json
 
+
+# временные сбои песочницы Wandbox (нехватка ресурсов рантайма) — считаем backend недоступным
+_TRANSIENT = ('oci runtime', 'resource temporarily', 'crun:', 'cannot allocate', 'fork:')
+_ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+_GODBOLT_ID = {'c': 'cg132', 'cpp': 'g132'}  # gcc 13.2 (C / C++) на Compiler Explorer
+
+
+async def _wandbox_run(code: str, lang: str, stdin: str) -> dict:
+    data = await _wandbox(code, lang, stdin)
+    ce = data.get('compiler_error') or ''
+    if any(s in ce.lower() for s in _TRANSIENT):
+        raise RuntimeError('wandbox transient')
+    return {
+        'compile_error': ce.strip(),
+        'output': data.get('program_output') or '',
+        'stderr': (data.get('program_error') or '').strip(),
+        'status': data.get('status'),
+    }
+
+
+async def _godbolt_run(code: str, lang: str, stdin: str) -> dict:
+    cid = _GODBOLT_ID['c' if lang == 'c' else 'cpp']
+    std = '-std=c11' if lang == 'c' else '-std=c++17'
+    payload = {
+        'source': code,
+        'options': {
+            'userArguments': std,
+            'executeParameters': {'args': [], 'stdin': stdin},
+            'filters': {'execute': True, 'binary': False},
+        },
+        'lang': 'c' if lang == 'c' else 'c++',
+    }
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'cpp-hero/1.0'}
+    async with _http.post(f'https://godbolt.org/api/compiler/{cid}/compile', json=payload, headers=headers,
+                          timeout=aiohttp.ClientTimeout(total=25)) as r:
+        if r.status != 200:
+            raise RuntimeError(f'godbolt http {r.status}')
+        data = json.loads(await r.text())
+
+    def joinarr(a):
+        return _ANSI.sub('', '\n'.join(x.get('text', '') for x in (a or [])))
+
+    compiled = data.get('code') == 0
+    er = data.get('execResult') or {}
+    return {
+        'compile_error': '' if compiled else (joinarr(data.get('stderr')) or 'ошибка компиляции'),
+        'output': joinarr(er.get('stdout')),
+        'stderr': joinarr(er.get('stderr')),
+        'status': str(er.get('code', 0)),
+    }
+
+
+async def _compile_any(code: str, lang: str, stdin: str) -> dict:
+    """Компилируем через Godbolt (основной) → Wandbox (резерв)."""
+    errs = []
+    for backend in (_godbolt_run, _wandbox_run):
+        try:
+            return await backend(code, lang, stdin)
+        except Exception as e:
+            errs.append(f'{backend.__name__}: {e}')
+    raise RuntimeError(' | '.join(errs))
+
 # ---------------- API ----------------
 
 def _auth_from_request(request: web.Request, body: dict | None = None) -> dict | None:
@@ -164,29 +226,18 @@ async def api_run(request: web.Request) -> web.Response:
     if not await storage.rate_ok(f'run:{ident}', 3):
         return web.json_response({'ok': False, 'error': 'слишком часто, подожди пару секунд'}, status=429)
 
-    compiler, _ = _compiler_for(lang)
-    cache_key = 'runcache:' + hashlib.sha256((compiler + '|' + stdin + '|' + code).encode()).hexdigest()
+    cache_key = 'runcache:' + hashlib.sha256((lang + '|' + stdin + '|' + code).encode()).hexdigest()
     cached = await storage.kv_get(cache_key)
     if cached:
         return web.json_response(json.loads(cached))
 
     try:
-        data = await _wandbox(code, lang, stdin)
+        result = await _compile_any(code, lang, stdin)
     except Exception as e:
-        log.warning('wandbox error: %s', e)
-        return web.json_response({'ok': False, 'error': 'компилятор недоступен, попробуй ещё раз'}, status=502)
+        log.warning('compile failed (all backends): %s', e)
+        return web.json_response({'ok': False, 'error': 'компилятор временно недоступен, попробуй ещё раз'}, status=503)
 
-    result = {
-        'ok': True,
-        'compile_error': (data.get('compiler_error') or '').strip(),
-        'output': data.get('program_output') or '',
-        'stderr': (data.get('program_error') or '').strip(),
-        'status': data.get('status'),
-    }
-    # временные сбои песочницы Wandbox (нехватка ресурсов) — НЕ кэшируем и отдаём как «занят»
-    low = result['compile_error'].lower()
-    if any(s in low for s in ('oci runtime', 'resource temporarily', 'crun:', 'cannot allocate', 'fork:')):
-        return web.json_response({'ok': False, 'error': 'компилятор сейчас занят, попробуй ещё раз'}, status=503)
+    result['ok'] = True
     await storage.kv_set(cache_key, json.dumps(result), 86400)
     return web.json_response(result)
 
