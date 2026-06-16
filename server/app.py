@@ -22,6 +22,8 @@ log = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 APP_URL = os.environ.get('APP_URL', 'https://tg.eu-cdn539.com').rstrip('/')
+BUILD = 'p3'  # версия фронтенда — добавляется к URL мини-аппа, чтобы Telegram грузил свежую страницу
+APP_URL_V = f'{APP_URL}?v={BUILD}'
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAX_BODY = 256 * 1024
 MAX_CODE = 20_000
@@ -242,8 +244,15 @@ async def api_run(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
-async def page_index(_: web.Request) -> web.FileResponse:
-    return web.FileResponse(ROOT / 'index.html', headers={'Cache-Control': 'no-cache'})
+_LOCAL_JS = ('data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'theory.js', 'theory_c.js', 'practice.js', 'langs.js')
+
+
+async def page_index(_: web.Request) -> web.Response:
+    # добавляем ?v=BUILD к локальным скриптам — гарантированный сброс кэша при новом деплое
+    html = (ROOT / 'index.html').read_text(encoding='utf-8')
+    for f in _LOCAL_JS:
+        html = html.replace(f'src="{f}"', f'src="{f}?v={BUILD}"')
+    return web.Response(text=html, content_type='text/html', headers={'Cache-Control': 'no-cache'})
 
 
 async def page_ide(_: web.Request) -> web.FileResponse:
@@ -285,7 +294,7 @@ def build_web_app() -> web.Application:
 
 def _app_button() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text='🚀 Открыть тренажёр', web_app=WebAppInfo(url=APP_URL)),
+        InlineKeyboardButton(text='🚀 Открыть тренажёр', web_app=WebAppInfo(url=APP_URL_V)),
     ]])
 
 
