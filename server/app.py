@@ -192,11 +192,11 @@ async def api_run(request: web.Request) -> web.Response:
 
 
 async def page_index(_: web.Request) -> web.FileResponse:
-    return web.FileResponse(ROOT / 'index.html')
+    return web.FileResponse(ROOT / 'index.html', headers={'Cache-Control': 'no-cache'})
 
 
 async def page_ide(_: web.Request) -> web.FileResponse:
-    return web.FileResponse(ROOT / 'ide.html')
+    return web.FileResponse(ROOT / 'ide.html', headers={'Cache-Control': 'no-cache'})
 
 
 _STATIC_JS = {'data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'theory.js', 'theory_c.js', 'practice.js', 'langs.js'}
@@ -206,7 +206,7 @@ async def page_js(request: web.Request) -> web.FileResponse:
     name = request.path.lstrip('/')
     if name not in _STATIC_JS:
         raise web.HTTPNotFound()
-    return web.FileResponse(ROOT / name)
+    return web.FileResponse(ROOT / name, headers={'Cache-Control': 'no-cache'})
 
 
 def build_web_app() -> web.Application:

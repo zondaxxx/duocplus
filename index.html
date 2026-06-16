@@ -759,17 +759,20 @@ function openSheet(innerHTML) {
 }
 function openLessonSheet(id) {
   const { u, l } = ALL_LESSONS[lessonIndex(id)];
+  const hasPractice = ACTIVE.runLang === 'cpp' && l.practice;
   const ov = openSheet(`
     <h3>${l.icon} ${esc(l.title)}</h3>
     <div class="sub">День ${u.day} · ${Math.min(LESSON_SIZE, l.ex.length)} вопросов из пула ${l.ex.length} · +10 XP${S.done[id] ? ' · пройден ✓' : ''}</div>
     <button class="btn blue" data-a="theory">📖 Конспект</button>
     <button class="btn" data-a="start">${S.done[id] ? 'Повторить' : 'Начать урок'}</button>
+    ${hasPractice ? `<button class="btn" style="background:var(--gold);box-shadow:0 4px 0 #c79a00" data-a="practice">🎯 Практика — написать код${S.practiceDone[id] ? ' ✓' : ''}</button>` : ''}
     <button class="btn ghost" data-a="close">Закрыть</button>`);
   ov.addEventListener('click', e => {
     const a = e.target.closest('[data-a]'); if (!a) return;
     if (a.dataset.a === 'close') ov.close();
     if (a.dataset.a === 'theory') { ov.close(); openTheory(id, true); }
     if (a.dataset.a === 'start') { ov.close(); startLesson(id); }
+    if (a.dataset.a === 'practice') { ov.close(); openPractice(l); }
   });
 }
 function openTheory(id, offerStart) {
