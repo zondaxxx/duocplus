@@ -293,6 +293,28 @@ textarea.editor:focus { border-color: var(--blue); }
 .editor-bar .btn { margin:0; }
 .spin { display:inline-block; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== практика: редактор кода в уроке ===== */
+.prac-wrap { padding: 16px 16px 160px; }
+.prac-goal { font-size:15px; line-height:1.55; margin-bottom:14px; }
+.prac-goal code { background:#0d1418; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-family:Menlo,Consolas,monospace; font-size:.88em; color:#ffd27d; }
+.prac-tag { display:inline-block; margin-bottom:10px; font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; color:var(--gold); background:rgba(255,200,0,.1); border:2px solid rgba(255,200,0,.3); padding:4px 10px; border-radius:10px; }
+.ced { position:relative; background:#0d1418; border:2px solid var(--line); border-radius:12px; overflow:hidden; display:flex; height:240px; }
+.ced-gut { flex:none; overflow:hidden; min-width:38px; background:#0d1418; }
+.ced-gut .gi { padding:10px 0; font:12.5px/19px Menlo,Consolas,monospace; color:#5a6b75; }
+.ced-gut .gi div { height:19px; padding:0 8px 0 6px; text-align:right; }
+.ced-area { position:relative; flex:1; min-width:0; overflow:hidden; }
+.ced-area pre, .ced-area textarea { position:absolute; inset:0; margin:0; padding:10px 12px; font:12.5px/19px Menlo,Consolas,monospace; white-space:pre; tab-size:4; border:0; overflow:auto; }
+.ced-area pre { pointer-events:none; color:#d4d4d4; }
+.ced-area textarea { background:transparent; color:transparent; caret-color:#fff; resize:none; outline:none; }
+.ck-kw{color:#ff79b8}.ck-ty{color:#8be9fd}.ck-str{color:#ffd866}.ck-com{color:#6f8a96}.ck-num{color:#bd93f9}.ck-pre{color:#c586c0}.ck-fn{color:#dcdcaa}
+.prac-out { margin-top:12px; background:#0a0f12; border:2px solid var(--line); border-radius:12px; padding:11px 13px; font-family:Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; white-space:pre-wrap; min-height:40px; color:#cfe3ec; }
+.prac-out.ok { border-color:var(--green); color:#bff59a; }
+.prac-out.err { border-color:var(--red); color:#ffb4b4; }
+.prac-hint { margin-top:10px; background:rgba(28,176,246,.08); border:1px solid rgba(28,176,246,.3); border-radius:10px; padding:9px 12px; font-size:13px; line-height:1.5; }
+.prac-hint b { color:var(--blue); }
+.prac-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:560px; padding:12px 14px max(16px,env(safe-area-inset-bottom)); background:var(--bg); border-top:2px solid var(--line); z-index:45; display:flex; flex-direction:column; gap:8px; }
+.prac-bar .row { display:flex; gap:8px; } .prac-bar .row .btn { flex:1; margin:0; }
 </style>
 </head>
 <body>
@@ -310,6 +332,7 @@ textarea.editor:focus { border-color: var(--blue); }
 <script src="theory.js"></script>
 <script src="extra_c.js"></script>
 <script src="theory_c.js"></script>
+<script src="practice.js"></script>
 <script src="langs.js"></script>
 <script>
 'use strict';
@@ -338,6 +361,7 @@ function mergeBucket(a, b) { // объединение прогресса одн
   out.perfect = Object.assign({}, b.perfect, a.perfect);
   out.tickets = Object.assign({}, b.tickets, a.tickets);
   out.codeDone = Object.assign({}, b.codeDone, a.codeDone);
+  out.practiceDone = Object.assign({}, b.practiceDone, a.practiceDone);
   out.srs = Object.assign({}, b.srs);
   for (const g in (a.srs || {})) {
     const ea = a.srs[g], eb = (b.srs || {})[g];
@@ -388,7 +412,7 @@ window.addEventListener('visibilitychange', () => {
 const KEY = 'cppduo_v1';
 const LANG_IDS = Object.keys(LANGS);           // ['cpp','c']
 function blankProgress() {
-  return { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {} };
+  return { xp: 0, streak: 0, lastDay: '', done: {}, perfect: {}, tickets: {}, unlockAll: false, bestExam: 0, examCount: 0, srs: {}, codeDone: {}, practiceDone: {} };
 }
 function fillBucket(p) { return Object.assign(blankProgress(), p || {}); }
 function normalizeStore(raw) {
@@ -436,9 +460,10 @@ function examBonus(b) { b = b || 0; return b >= 90 ? 50 : b >= 75 ? 30 : b >= 50
 function computeXp(b) {
   if (!b) return 0;
   let xp = 0;
-  const done = b.done || {}, perfect = b.perfect || {}, code = b.codeDone || {};
+  const done = b.done || {}, perfect = b.perfect || {}, code = b.codeDone || {}, prac = b.practiceDone || {};
   for (const id in done) if (done[id]) xp += 10 + (perfect[id] ? 5 : 0); // урок: 10, +5 за идеал — один раз
   for (const id in code) if (code[id]) xp += 15;                          // код-челлендж: 15 — один раз
+  for (const id in prac) if (prac[id]) xp += 12;                          // практика урока: 12 — один раз
   xp += examBonus(b.bestExam);                                           // экзамен: бонус за ЛУЧШИЙ результат
   return xp;
 }
@@ -1079,6 +1104,8 @@ function finishLesson() {
   save();
   const gained = computeXp(S) - before;       // 0 при переигровке уже пройденного урока
   const id = L.id; L = null;
+  const lessonObj = ALL_LESSONS[lessonIndex(id)] && ALL_LESSONS[lessonIndex(id)].l;
+  const hasPractice = ACTIVE.runLang === 'cpp' && lessonObj && lessonObj.practice && !S.practiceDone[id];
   app.innerHTML = `<div class="endscr">
     <div class="big">${perfect ? '🏅' : '🎉'}</div>
     <h2>Урок пройден!</h2>
@@ -1089,12 +1116,14 @@ function finishLesson() {
     </div>
     ${gained > 0 && perfect ? '<p style="color:var(--gold);font-weight:900;margin-bottom:20px">Без единой ошибки! +5 бонусных XP</p>' : ''}
     ${replay && gained === 0 ? '<p style="color:var(--mut);font-weight:700;margin-bottom:20px">Повторение пройденного — XP за него уже начислен 🙂</p>' : ''}
-    <button class="btn" id="cont">Продолжить</button>
+    ${hasPractice ? '<p style="color:var(--gold);font-weight:800;margin-bottom:14px">🎯 Закрепи на практике — напиши программу сам (+12 XP)</p>' : ''}
+    ${hasPractice ? '<button class="btn" id="prac">🎯 Практическое задание</button><button class="btn ghost" id="cont" style="margin-top:10px">Пропустить</button>' : '<button class="btn" id="cont">Продолжить</button>'}
   </div>`;
   if (perfect) SFX.fanfare(); else SFX.complete();
   haptic('success');
   confetti();
   document.getElementById('cont').onclick = () => render();
+  const pb = document.getElementById('prac'); if (pb) pb.onclick = () => openPractice(lessonObj);
 }
 function confetti() {
   const em = ['🎉','⭐','✨','💚','🧩','🏆'];
@@ -1345,6 +1374,119 @@ async function execCode(code, outEl, btn) {
     outEl.textContent = TG ? '⚠️ нет связи с сервером' : '⚠️ запуск кода доступен только в Telegram-приложении';
     return null;
   } finally { btn.disabled = false; }
+}
+
+/* ================== практика урока (редактор кода) ================== */
+let PR = null; // { lesson, tries, hintsShown, solved }
+function cedHL(code){
+  return code.split('\n').map(ln=>{
+    let t = esc(ln);
+    const hold=[];
+    const stash = h => String.fromCharCode(0xE100 + (hold.push(h)-1));
+    t=t.replace(/\/\/.*/g, m=>stash('<span class="ck-com">'+m+'</span>'));
+    t=t.replace(/&quot;[^]*?&quot;|"[^"]*"|'(?:\\.|[^'])'/g, m=>stash('<span class="ck-str">'+m+'</span>'));
+    t=t.replace(/#\s*[a-z]+/g, m=>stash('<span class="ck-pre">'+m+'</span>'));
+    t=t.replace(/&lt;[\w.\/+]+&gt;/g, m=>stash('<span class="ck-str">'+m+'</span>'));
+    t=t.replace(/\b(return|if|else|for|while|do|switch|case|break|continue|using|namespace|struct|class|public|private|protected|true|false|const|new|delete|nullptr|virtual|override|template|typename|friend|explicit|static|operator|throw|try|catch|this)\b/g,'<span class="ck-kw">$1</span>');
+    t=t.replace(/\b(int|double|float|char|void|bool|auto|unsigned|long|short|size_t|std|vector|string|map|stack)\b/g,'<span class="ck-ty">$1</span>');
+    t=t.replace(/\b(\d+)\b/g,'<span class="ck-num">$1</span>');
+    t=t.replace(/\b([a-zA-Z_]\w*)(\s*\()/g,'<span class="ck-fn">$1</span>$2');
+    t=t.replace(/[-]/g, c=>hold[c.charCodeAt(0)-0xE100]);
+    return t || '&nbsp;';
+  }).join('\n');
+}
+function openPractice(lesson){
+  PR = { lesson, tries: 0, hintsShown: 0, solved: !!S.practiceDone[lesson.id] };
+  document.body.classList.add('inlesson');
+  app.innerHTML = `
+    <div class="lesson-top">
+      <button class="quit" id="pquit">✕</button>
+      <div style="font-weight:900;font-size:16px;flex:1;text-align:center">🎯 Практика · ${esc(lesson.title)}</div>
+      <div style="width:30px"></div>
+    </div>
+    <div class="prac-wrap">
+      <div class="prac-tag">🎯 напиши код сам · без сердечек</div>
+      <div class="prac-goal">${lesson.practice.goal}</div>
+      <div class="ced">
+        <div class="ced-gut" id="pgut"></div>
+        <div class="ced-area"><pre id="phl"></pre><textarea id="pcode" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea></div>
+      </div>
+      <div class="prac-out" id="pout">— напиши программу и нажми «Запустить и проверить»</div>
+      <div id="phint"></div>
+    </div>
+    <div class="prac-bar" id="pbar"></div>`;
+  document.getElementById('pquit').onclick = () => { PR=null; render(); };
+  const ta=document.getElementById('pcode'), pre=document.getElementById('phl'), gut=document.getElementById('pgut');
+  ta.value = lesson.practice.starter || '';
+  const draw=()=>{ pre.innerHTML=cedHL(ta.value); const n=ta.value.split('\n').length; let g=''; for(let i=1;i<=n;i++)g+='<div>'+i+'</div>'; gut.innerHTML='<div class="gi">'+g+'</div>'; sync(); };
+  const sync=()=>{ pre.scrollTop=ta.scrollTop; pre.scrollLeft=ta.scrollLeft; const gi=gut.firstElementChild; if(gi) gi.style.transform='translateY('+(-ta.scrollTop)+'px)'; };
+  ta.addEventListener('input', draw);
+  ta.addEventListener('scroll', sync);
+  ta.addEventListener('keydown', e=>{ if(e.key==='Tab'){ e.preventDefault(); const s=ta.selectionStart,en=ta.selectionEnd; ta.value=ta.value.slice(0,s)+'    '+ta.value.slice(en); ta.selectionStart=ta.selectionEnd=s+4; draw(); } });
+  draw();
+  renderPracBar();
+  window.scrollTo(0,0);
+}
+function renderPracBar(){
+  const bar=document.getElementById('pbar'); if(!bar) return;
+  const showSol = PR.tries>=2 || PR.hintsShown>=(PR.lesson.practice.hints||[]).length;
+  bar.innerHTML = `<button class="btn run" id="pcheck">▶ Запустить и проверить</button>
+    <div class="row">
+      <button class="btn ghost" id="phintbtn">💡 Подсказка</button>
+      ${showSol?'<button class="btn ghost" id="psol">📖 Решение</button>':''}
+    </div>` + (PR.solved?'<button class="btn" id="pnext">Продолжить →</button>':'');
+  bar.querySelector('#pcheck').onclick = runPracticeCheck;
+  bar.querySelector('#phintbtn').onclick = showNextHint;
+  const ps=bar.querySelector('#psol'); if(ps) ps.onclick=showSolution;
+  const pn=bar.querySelector('#pnext'); if(pn) pn.onclick=()=>{ PR=null; render(); };
+}
+function showNextHint(){
+  const hints=PR.lesson.practice.hints||[];
+  if(PR.hintsShown>=hints.length){ document.getElementById('phint').innerHTML='<div class="prac-hint">Подсказки кончились — загляни в 📖 Решение.</div>'; renderPracBar(); return; }
+  PR.hintsShown++;
+  let html=''; for(let i=0;i<PR.hintsShown;i++) html+='<div class="prac-hint"><b>Подсказка '+(i+1)+':</b> '+hints[i]+'</div>';
+  document.getElementById('phint').innerHTML=html;
+  renderPracBar();
+}
+function showSolution(){
+  const ta=document.getElementById('pcode');
+  ta.value=PR.lesson.practice.solution||'';
+  ta.dispatchEvent(new Event('input'));
+  document.getElementById('phint').innerHTML='<div class="prac-hint">📖 Вот рабочее решение. Разбери его и нажми «Запустить и проверить», чтобы закрепить.</div>';
+}
+async function runPracticeCheck(){
+  const pr=PR.lesson.practice, out=document.getElementById('pout');
+  const btn=document.getElementById('pcheck'); btn.disabled=true; btn.innerHTML='<span class="spin">⏳</span> Проверяю…';
+  out.className='prac-out'; out.textContent='⏳ Компиляция и запуск…';
+  try{
+    const r=await fetch('/api/run',{method:'POST',headers:tgHeaders({'Content-Type':'application/json'}),body:JSON.stringify({code:document.getElementById('pcode').value,lang:'cpp',stdin:pr.stdin||''})});
+    if(r.status===429){ out.className='prac-out err'; out.textContent='⏳ Слишком часто — подожди пару секунд.'; return; }
+    if(r.status===503){ out.className='prac-out err'; out.textContent='⏳ Компилятор сейчас занят, попробуй ещё раз через секунду.'; return; }
+    const j=await r.json();
+    if(!j.ok){ out.className='prac-out err'; out.textContent='⚠️ '+(j.error||'не удалось запустить'); return; }
+    const cerr=(j.compile_error||'').trim(), got=(j.output||'').trim(), exp=String(pr.expect).trim();
+    if(cerr){
+      PR.tries++;
+      out.className='prac-out err'; out.textContent='⛔ Не компилируется:\n'+cerr;
+      nudge();
+    } else if(got===exp || got.includes(exp)){
+      out.className='prac-out ok'; out.textContent=(got||'(пусто)')+'\n\n✅ Верно! Практика засчитана.';
+      if(!S.practiceDone[PR.lesson.id]){ S.practiceDone[PR.lesson.id]=true; bumpStreak(); save(); }
+      PR.solved=true;
+      SFX.fanfare(); haptic('success'); confetti();
+      renderPracBar();
+    } else {
+      PR.tries++;
+      out.className='prac-out err'; out.textContent='Твой вывод:\n'+(got||'(пусто)')+'\n\nОжидалось:\n'+exp;
+      nudge();
+    }
+  }catch(e){ out.className='prac-out err'; out.textContent='⚠️ нет связи с сервером'; }
+  finally{ const b=document.getElementById('pcheck'); if(b){ b.disabled=false; b.innerHTML='▶ Запустить и проверить'; } }
+}
+// мягко подсказываем (не отнимая «жизни»): автоматически открываем следующую подсказку
+function nudge(){
+  const hints=PR.lesson.practice.hints||[];
+  if(PR.hintsShown<hints.length) showNextHint(); else renderPracBar();
 }
 
 render();

@@ -28,11 +28,13 @@ def compute_bucket_xp(bucket: dict) -> int:
     done = bucket.get('done') or {}
     perfect = bucket.get('perfect') or {}
     code = bucket.get('codeDone') or {}
+    prac = bucket.get('practiceDone') or {}
     xp = 0
     for lid, v in done.items():
         if v:
             xp += 10 + (5 if perfect.get(lid) else 0)
     xp += 15 * sum(1 for v in code.values() if v)
+    xp += 12 * sum(1 for v in prac.values() if v)
     xp += exam_bonus(int(bucket.get('bestExam') or 0))
     return xp
 

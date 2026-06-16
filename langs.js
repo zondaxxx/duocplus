@@ -26,6 +26,14 @@
   }));
 })(window.COURSE_C, window.THEORY_C);
 
+// Практические задания (practice.js) — только для уроков C++ (где есть запись по id).
+(function mergePractice(course, pr) {
+  if (!course || !pr) return;
+  course.forEach(u => u.lessons.forEach(l => {
+    if (pr[l.id] && pr[l.id].expect != null) l.practice = pr[l.id];
+  }));
+})(window.COURSE, window.PRACTICE_CPP);
+
 // Сборка языков: C++ (из data.js) и C / Основы программирования (из data_c.js).
 window.PLAYGROUND_CPP = `#include <iostream>
 

@@ -459,6 +459,47 @@ const LESSONS = [
 }
 ];
 
+// Практическое задание — финал урока: написать программу самому, она реально компилируется и сверяется по выводу.
+const PRACTICE = {
+  hello:{
+    goal:'Теперь собери программу <b>сам, с нуля</b>. Она должна вывести ровно строку:<br><code>C++ — это сила!</code>',
+    starter:'// собери программу сам — пустой файл, как в начале\n',
+    expect:'C++ — это сила!',
+    hint:'#include <iostream>\n\nint main() {\n    std::cout << "C++ — это сила!" << std::endl;\n    return 0;\n}'
+  },
+  io:{
+    goal:'Считай целое число <code>n</code> и выведи его <b>квадрат</b> (n × n).<br>Проверю на вводе <code>6</code> — должно получиться <code>36</code>.',
+    starter:'#include <iostream>\n\nint main() {\n    \n    return 0;\n}',
+    expect:'36', stdin:'6',
+    hint:'int n;\nstd::cin >> n;\nstd::cout << n * n << std::endl;'
+  },
+  branch:{
+    goal:'Считай число и выведи <code>YES</code>, если оно <b>больше 100</b>, иначе <code>NO</code>.<br>Проверю на вводе <code>150</code> — должно быть <code>YES</code>.',
+    starter:'#include <iostream>\n\nint main() {\n    int n;\n    std::cin >> n;\n    \n    return 0;\n}',
+    expect:'YES', stdin:'150',
+    hint:'if (n > 100) {\n        std::cout << "YES";\n    } else {\n        std::cout << "NO";\n    }'
+  },
+  loop:{
+    goal:'С помощью цикла выведи <b>сумму чисел от 1 до 100</b>.<br>Правильный ответ — <code>5050</code>.',
+    starter:'#include <iostream>\n\nint main() {\n    int sum = 0;\n    \n    std::cout << sum << std::endl;\n    return 0;\n}',
+    expect:'5050',
+    hint:'for (int i = 1; i <= 100; i++) {\n        sum += i;\n    }'
+  },
+  func:{
+    goal:'Напиши функцию <code>int cube(int x)</code> (куб числа) и выведи <code>cube(4)</code>.<br>Должно получиться <code>64</code>.',
+    starter:'#include <iostream>\n\n// напиши функцию cube здесь\n\nint main() {\n    \n    return 0;\n}',
+    expect:'64',
+    hint:'int cube(int x) {\n    return x * x * x;\n}\n// в main:  std::cout << cube(4);'
+  },
+  vector:{
+    goal:'Создай <code>std::vector&lt;int&gt;</code> с числами <code>{5, 10, 15, 20}</code> и выведи их <b>сумму</b>.<br>Должно получиться <code>50</code>.',
+    starter:'#include <iostream>\n#include <vector>\n\nint main() {\n    \n    return 0;\n}',
+    expect:'50',
+    hint:'std::vector<int> v = {5, 10, 15, 20};\nint sum = 0;\nfor (int x : v) sum += x;\nstd::cout << sum;'
+  }
+};
+LESSONS.forEach(l=>{ l.practice = PRACTICE[l.id]; });
+
 /* ===================== подсветка ===================== */
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function hlLine(t){
@@ -493,6 +534,7 @@ const codeEl=$('#code'), preEl=$('#hl'), hlEl=preEl.firstElementChild, gutterEl=
 const STKEY='cpptrainer_v1';
 let progress={}; try{progress=JSON.parse(localStorage.getItem(STKEY))||{};}catch(e){}
 let li=0, si=0, problems=[], curErr=null, bottomTab='problems', lastRun='';
+let phase='build'; // 'build' = пошаговая сборка примера | 'practice' = практическое задание
 
 function lineOf(code, re){ const m=re.exec(code); if(!m) return -1; return code.slice(0,m.index).split('\n').length-1; }
 
@@ -500,6 +542,7 @@ function evaluate(){
   const code=codeEl.value;
   const lesson=LESSONS[li];
   problems=[]; const errLines=new Set(); curErr=null;
+  if(phase==='practice'){ renderEditor(code,new Set()); renderMentor(); renderProblems(); updateStatus(code,0); return; }
   let advanced=false;
   while(si<lesson.steps.length){
     const step=lesson.steps[si];
@@ -541,17 +584,35 @@ function syncScroll(){
 function renderMentor(){
   const lesson=LESSONS[li];
   const total=lesson.steps.length;
-  $('#prog').textContent = si>=total ? 'готово ✓' : ('шаг '+(si+1)+' / '+total);
   const mbody=$('#mbody'), mbtns=$('#mbtns');
-  if(si>=total){
-    mbody.innerHTML='<div class="step-title"><span class="n">✓</span>Программа собрана!</div>'+
-      '<div class="theory"><p>Отлично — программа готова. Нажми <b>▶ Запустить</b>: код скомпилируется по-настоящему (gcc, C++17) и ты увидишь вывод.</p></div>'+
-      '<div class="task"><span class="tt">Ожидаемый вывод</span>'+esc(lesson.output)+'</div>'+
+  if(phase==='practice'){
+    // ===== практическое задание =====
+    $('#prog').textContent='практика 🎯';
+    const done=progress[lesson.id];
+    mbody.innerHTML='<div class="step-title"><span class="n">🎯</span>Практика — собери сам</div>'+
+      '<div class="theory"><p>'+lesson.practice.goal+'</p><p>Напиши программу в редакторе и нажми <b>▶ Запустить и проверить</b> — код реально скомпилируется, а вывод сверится с ответом.</p></div>'+
+      (lastRun?('<div class="fb '+(lastRun.ok?'ok':'err')+'">'+lastRun.html+'</div>'):'')+
+      '<div id="hintwrap"></div>';
+    mbtns.innerHTML='<button class="btn run" id="b-check">▶ Запустить и проверить</button>'+
+      '<div class="row"><button class="btn ghost" id="b-hint">💡 Подсказка</button><button class="btn ghost" id="b-reset">Сбросить</button></div>'+
+      (done?('<div class="row" style="margin-top:2px">'+nextBtn()+'</div>'):'');
+    $('#b-check').onclick=runPractice;
+    $('#b-hint').onclick=()=>{ $('#hintwrap').innerHTML='<div class="hintbox">'+esc(lesson.practice.hint)+'</div>'; };
+  } else if(si>=total){
+    // ===== пример собран =====
+    $('#prog').textContent='пример готов ✓';
+    mbody.innerHTML='<div class="step-title"><span class="n">✓</span>Пример собран!</div>'+
+      '<div class="theory"><p>Отлично — программа готова. Можешь <b>▶ запустить</b> её (код реально скомпилируется, gcc C++17) и увидеть вывод.</p><p>А затем — <b>практическое задание</b>: написать программу <b>самому</b>.</p></div>'+
+      '<div class="task"><span class="tt">Ожидаемый вывод примера</span>'+esc(lesson.output)+'</div>'+
       (lastRun?('<div class="fb '+(lastRun.ok?'ok':'err')+'">'+lastRun.html+'</div>'):'');
-    mbtns.innerHTML='<button class="btn run" id="b-run">▶ Запустить</button>'+
-      '<div class="row"><button class="btn ghost" id="b-reset">Сбросить</button>'+nextBtn()+'</div>';
-    $('#b-run').onclick=run;
+    mbtns.innerHTML='<button class="btn ghost" id="b-run">▶ Запустить пример</button>'+
+      '<button class="btn run" id="b-practice">🎯 Практическое задание →</button>'+
+      '<div class="row"><button class="btn ghost" id="b-reset">Сбросить</button></div>';
+    $('#b-run').onclick=runExample;
+    $('#b-practice').onclick=startPractice;
   } else {
+    // ===== пошаговая сборка =====
+    $('#prog').textContent='шаг '+(si+1)+' / '+total;
     const step=lesson.steps[si];
     mbody.innerHTML='<div class="step-title"><span class="n">'+(si+1)+'</span>'+esc(step.title)+'</div>'+
       '<div class="theory">'+step.theory+'</div>'+
@@ -563,8 +624,14 @@ function renderMentor(){
     $('#b-hint').onclick=()=>{ $('#hintwrap').innerHTML='<div class="hintbox">'+esc(step.snippet)+'</div>'; };
     $('#b-insert').onclick=()=>{ codeEl.value=step.apply(codeEl.value); onEdit(); codeEl.focus(); };
   }
-  $('#b-reset').onclick=()=>{ if(confirm('Очистить редактор и начать урок заново?')){ startLesson(li,true); } };
+  const br=$('#b-reset'); if(br) br.onclick=()=>{ if(confirm('Очистить редактор и начать урок заново?')){ startLesson(li,true); } };
   const nb=$('#b-next'); if(nb) nb.onclick=()=>{ if(li+1<LESSONS.length) startLesson(li+1); };
+}
+function startPractice(){
+  phase='practice'; lastRun=''; problems=[];
+  codeEl.value=LESSONS[li].practice.starter||'';
+  renderEditor(codeEl.value,new Set()); renderMentor(); renderProblems(); updateStatus(codeEl.value,0);
+  showBottom('problems'); codeEl.focus();
 }
 function nextBtn(){ return li+1<LESSONS.length ? '<button class="btn primary" id="b-next">Следующий урок →</button>' : '<button class="btn primary" disabled>Это последний урок 🎉</button>'; }
 
@@ -599,30 +666,48 @@ function caretPos(code){ const p=codeEl.selectionStart||0; const before=code.sli
 let editTimer=null;
 function onEdit(){ syncScroll(); clearTimeout(editTimer); editTimer=setTimeout(evaluate, 220); }
 
-/* запуск через бэкенд (если страница на сервере), иначе — ожидаемый вывод */
-async function run(){
+/* компиляция через бэкенд: возвращает {output, compile_error} либо null при ошибке сети */
+async function compile(stdin){
+  const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:codeEl.value,lang:'cpp',stdin:stdin||''})});
+  const j=await r.json();
+  if(!j.ok) throw new Error(j.error||'run failed');
+  return { out:(j.output||'').replace(/\s+$/,''), cerr:(j.compile_error||'').trim() };
+}
+// «Запустить пример» — просто показать вывод собранной программы (без зачёта)
+async function runExample(){
   const lesson=LESSONS[li];
   const btn=$('#b-run'); if(btn){btn.disabled=true; btn.innerHTML='<span class="spin">⏳</span> Компиляция…';}
   try{
-    const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:codeEl.value,lang:'cpp',stdin:lesson.stdin||''})});
-    const j=await r.json();
-    if(!j.ok) throw new Error(j.error||'run failed');
-    const out=(j.output||'').replace(/\s+$/,''); const cerr=(j.compile_error||'').trim();
-    if(cerr){ lastRun={ok:false, text:cerr, html:'<b>Ошибка компиляции:</b><br>'+esc(cerr).replace(/\n/g,'<br>')}; }
-    else{
-      const ok=lesson.expect? out.includes(lesson.expect): (out===lesson.output||true);
-      lastRun={ok:true, text:out||'(пустой вывод)', html:'<b>✅ Скомпилировалось и запустилось!</b><br>Вывод: <code>'+esc(out||'(пусто)')+'</code>'};
-      progress[lesson.id]=true; localStorage.setItem(STKEY,JSON.stringify(progress)); renderFiles();
-    }
-    showBottom('output');
-  }catch(e){
-    // оффлайн/без сервера — показываем ожидаемый вывод
-    lastRun={ok:true, text:lesson.output, html:'<b>Запуск (демо):</b> сервер компиляции недоступен, показываю ожидаемый вывод:<br><code>'+esc(lesson.output)+'</code>'};
-    progress[lesson.id]=true; localStorage.setItem(STKEY,JSON.stringify(progress)); renderFiles();
-    showBottom('output');
-  }
-  renderMentor();
+    const {out,cerr}=await compile(lesson.stdin);
+    lastRun = cerr
+      ? {ok:false, html:'<b>Ошибка компиляции:</b><br>'+esc(cerr).replace(/\n/g,'<br>'), text:cerr}
+      : {ok:true, html:'<b>✅ Скомпилировалось и запустилось!</b><br>Вывод: <code>'+esc(out||'(пусто)')+'</code>', text:out||'(пустой вывод)'};
+  }catch(e){ lastRun={ok:true, html:'<b>Запуск (демо):</b> сервер компиляции недоступен. Ожидаемый вывод: <code>'+esc(lesson.output)+'</code>', text:lesson.output}; }
+  showBottom('output'); renderMentor();
 }
+// «Запустить и проверить» — практика: компилируем и сверяем вывод с ответом
+async function runPractice(){
+  const lesson=LESSONS[li], pr=lesson.practice;
+  const btn=$('#b-check'); if(btn){btn.disabled=true; btn.innerHTML='<span class="spin">⏳</span> Проверяю…';}
+  try{
+    const {out,cerr}=await compile(pr.stdin);
+    if(cerr){
+      lastRun={ok:false, html:'<b>⛔ Не компилируется:</b><br>'+esc(cerr).replace(/\n/g,'<br>'), text:cerr};
+    } else {
+      const exp=String(pr.expect).trim();
+      const ok = out.trim()===exp || out.includes(exp);
+      if(ok){
+        progress[lesson.id]=true; localStorage.setItem(STKEY,JSON.stringify(progress)); renderFiles();
+        lastRun={ok:true, html:'<b>✅ Задание выполнено!</b><br>Вывод: <code>'+esc(out||'(пусто)')+'</code> — верно. Урок пройден 🎉', text:out};
+        toast('✅ Урок пройден!');
+      } else {
+        lastRun={ok:false, html:'<b>❌ Пока не то.</b><br>Твой вывод: <code>'+esc(out||'(пусто)')+'</code><br>Ожидалось: <code>'+esc(exp)+'</code>', text:out};
+      }
+    }
+  }catch(e){ lastRun={ok:false, html:'⚠️ Сервер компиляции недоступен — практику можно проверить только на сайте.', text:''}; }
+  showBottom('output'); renderMentor();
+}
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),1600); }
 
 /* ===================== уроки/файлы ===================== */
 function renderFiles(){
@@ -638,7 +723,7 @@ function renderFiles(){
 function unlockedUpTo(){ let k=0; for(let i=0;i<LESSONS.length;i++){ if(progress[LESSONS[i].id]) k=i+1; } return k; }
 
 function startLesson(i, keepIfSame){
-  li=i; si=0; lastRun=''; problems=[]; curErr=null;
+  li=i; si=0; phase='build'; lastRun=''; problems=[]; curErr=null;
   codeEl.value='';
   $('#tabname').textContent=LESSONS[i].file;
   $('#titletext').textContent=LESSONS[i].file+' — C++ Trainer';

@@ -183,6 +183,10 @@ async def api_run(request: web.Request) -> web.Response:
         'stderr': (data.get('program_error') or '').strip(),
         'status': data.get('status'),
     }
+    # временные сбои песочницы Wandbox (нехватка ресурсов) — НЕ кэшируем и отдаём как «занят»
+    low = result['compile_error'].lower()
+    if any(s in low for s in ('oci runtime', 'resource temporarily', 'crun:', 'cannot allocate', 'fork:')):
+        return web.json_response({'ok': False, 'error': 'компилятор сейчас занят, попробуй ещё раз'}, status=503)
     await storage.kv_set(cache_key, json.dumps(result), 86400)
     return web.json_response(result)
 
@@ -195,7 +199,7 @@ async def page_ide(_: web.Request) -> web.FileResponse:
     return web.FileResponse(ROOT / 'ide.html')
 
 
-_STATIC_JS = {'data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'theory.js', 'theory_c.js', 'langs.js'}
+_STATIC_JS = {'data.js', 'data_c.js', 'extra.js', 'extra_c.js', 'theory.js', 'theory_c.js', 'practice.js', 'langs.js'}
 
 
 async def page_js(request: web.Request) -> web.FileResponse:
@@ -218,6 +222,7 @@ def build_web_app() -> web.Application:
     app.router.add_get('/extra_c.js', page_js)
     app.router.add_get('/theory.js', page_js)
     app.router.add_get('/theory_c.js', page_js)
+    app.router.add_get('/practice.js', page_js)
     app.router.add_get('/langs.js', page_js)
     app.router.add_get('/api/health', api_health)
     app.router.add_get('/api/progress', api_get_progress)
